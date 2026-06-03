@@ -1,5 +1,9 @@
 // TypeScript 类型定义
 
+// ============================================
+// 基础类型
+// ============================================
+
 export interface Location {
   longitude: number
   latitude: number
@@ -17,6 +21,20 @@ export interface POI {
   visit_duration?: number
   description?: string
   image_url?: string
+  popularity_score?: number
+  queue_time_min?: number
+}
+
+export interface Review {
+  id: string
+  poi_name: string
+  user_name: string
+  rating: number
+  content: string
+  date: string
+  sentiment: 'positive' | 'neutral' | 'negative'
+  tags: string[]
+  like_count: number
 }
 
 export interface Weather {
@@ -57,6 +75,18 @@ export interface Attraction {
   ticket_price?: number
 }
 
+export interface RouteSegment {
+  from_poi: string
+  to_poi: string
+  from_location: Location
+  to_location: Location
+  distance_meters: number
+  duration_minutes: number
+  polyline: string
+  transport_mode: 'driving' | 'walking' | 'transit'
+  cost_estimate: number
+}
+
 export interface DayPlan {
   date: string
   day_index: number
@@ -74,6 +104,31 @@ export interface Budget {
   total_meals: number
   total_transportation: number
   total: number
+}
+
+export interface OptimizationMetrics {
+  time_efficiency: number
+  cost_efficiency: number
+  preference_match: number
+  route_coherence: number
+  overall_score: number
+}
+
+export interface RoutePlan {
+  city: string
+  date: string
+  start_location?: Location
+  start_time?: string
+  ordered_pois: Attraction[]
+  route_segments: RouteSegment[]
+  total_distance_km: number
+  total_duration_minutes: number
+  total_cost: number
+  optimization_metrics?: OptimizationMetrics
+  meals: Meal[]
+  weather?: Weather
+  suggestions: string
+  trade_off_explanations: string[]
 }
 
 export interface TripPlan {
@@ -100,10 +155,28 @@ export interface TripRequest {
   budget?: [number, number]
 }
 
+export interface LocalRouteRequest {
+  session_id?: string
+  user_id?: string
+  city: string
+  date: string
+  start_location?: Location
+  start_address?: string
+  start_time?: string
+  end_time?: string
+  transportation: string
+  preferences: string[]
+  free_text_input?: string
+  budget?: [number, number]
+  llm_provider?: string
+  poi_count: number
+}
+
 export interface TripPlanResponse {
   success: boolean
   message: string
   data?: TripPlan
+  route_plan?: RoutePlan
   status: TripStatus
 }
 
@@ -154,4 +227,66 @@ export interface UserFeedback {
 export interface LLMProvider {
   name: string
   model: string
+}
+
+export interface AuthUser {
+  id: number
+  username: string
+  email: string
+}
+
+export interface LoginRequest {
+  username_or_email: string
+  password: string
+}
+
+export interface RegisterRequest {
+  username: string
+  email: string
+  password: string
+}
+
+export interface AuthResponse {
+  access_token: string
+  token_type: string
+  user: AuthUser
+}
+
+export interface ChatHistoryItem {
+  session_id: string
+  title: string
+  latest_message: string
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatHistoryDetail {
+  session_id: string
+  title: string
+  history: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    timestamp?: string
+  }>
+}
+
+export interface TripHistoryItem {
+  session_id: string
+  title: string
+  city: string
+  record_type: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TripHistoryDetail {
+  session_id: string
+  title: string
+  city: string
+  record_type: string
+  request_data: Record<string, unknown>
+  result_data: TripPlan | RoutePlan | Record<string, unknown> | null
+  created_at: string
+  updated_at: string
 }

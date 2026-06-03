@@ -1,6 +1,7 @@
 """记忆系统模块 - 支持对话记忆和用户偏好存储"""
 
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 from .config import get_settings
@@ -9,18 +10,21 @@ from .config import get_settings
 class ConversationMemory:
     """对话记忆管理"""
 
-    def __init__(self, session_id: str, max_history: int = 10):
+    def __init__(self, session_id: str, user_id: Optional[str] = None, max_history: int = 10):
         """
         初始化对话记忆
 
         Args:
             session_id: 会话 ID
+            user_id: 用户 ID（用于个性化持久化）
             max_history: 最大历史消息数
         """
         self.session_id = session_id
+        self.user_id = user_id
         self.max_history = max_history
         self._history: List[BaseMessage] = []
         self._user_preferences: Dict[str, Any] = {}
+        self._created_at = datetime.now()
 
     def add_message(self, message: BaseMessage) -> None:
         """添加消息到历史"""
@@ -79,7 +83,7 @@ class ConversationMemory:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationMemory":
         """从字典反序列化"""
-        memory = cls(data["session_id"])
+        memory = cls(data["session_id"], data.get("user_id"))
         for msg in data.get("history", []):
             if msg["role"] == "user":
                 memory.add_user_message(msg["content"])
@@ -87,6 +91,50 @@ class ConversationMemory:
                 memory.add_ai_message(msg["content"])
         memory._user_preferences = data.get("preferences", {})
         return memory
+
+    async def persist_to_chromadb(self) -> bool:
+        """将偏好持久化到ChromaDB"""
+        if not self.user_id:
+            return False
+
+        try:
+            from ..services.preference_service import get_preference_service
+            pref_service = get_preference_service()
+            profile = await pref_service.get_user_profile(self.user_id)
+            if profile:
+                # 更新现有画像的偏好类别
+                for key, value in self._user_preferences.items():
+                    if isinstance(value, (int, float)) and key in profile.preferred_categories:
+                        profile.preferred_categories[key] = float(value)
+                profile.last_updated = datetime.now()
+                await pref_service.save_user_profile(profile)
+                print(f"[Memory] 偏好已同步到ChromaDB: user={self.user_id}")
+                return True
+        except Exception as e:
+            print(f"[Memory] ChromaDB同步失败: {e}")
+
+        return False
+
+    async def load_from_chromadb(self) -> bool:
+        """从ChromaDB加载用户偏好"""
+        if not self.user_id:
+            return False
+
+        try:
+            from ..services.preference_service import get_preference_service
+            pref_service = get_preference_service()
+            profile = await pref_service.get_user_profile(self.user_id)
+            if profile:
+                self._user_preferences.update(profile.preferred_categories)
+                self.set_preference("budget_preference", profile.budget_preference)
+                self.set_preference("transport_preference", profile.transport_preference)
+                self.set_preference("visit_history", profile.visit_history)
+                print(f"[Memory] 已从ChromaDB加载偏好: user={self.user_id}")
+                return True
+        except Exception as e:
+            print(f"[Memory] ChromaDB加载失败: {e}")
+
+        return False
 
 
 class MemoryManager:
@@ -100,10 +148,19 @@ class MemoryManager:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def get_memory(self, session_id: str) -> ConversationMemory:
+    def get_memory(self, session_id: str, user_id: Optional[str] = None) -> ConversationMemory:
         """获取或创建会话记忆"""
         if session_id not in self._memories:
-            self._memories[session_id] = ConversationMemory(session_id)
+            memory = ConversationMemory(session_id, user_id=user_id)
+            self._memories[session_id] = memory
+            # 异步加载ChromaDB偏好（fire-and-forget）
+            if user_id:
+                import asyncio
+                try:
+                    asyncio.create_task(memory.load_from_chromadb())
+                except RuntimeError:
+                    # 没有事件循环时使用同步方式
+                    pass
         return self._memories[session_id]
 
     def clear_memory(self, session_id: str) -> None:

@@ -9,6 +9,7 @@ export interface ChatMessage {
 
 export const useChatStore = defineStore('chat', () => {
   const sessionId = ref<string>('')
+  const title = ref<string>('')
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
 
@@ -16,6 +17,14 @@ export const useChatStore = defineStore('chat', () => {
 
   function setSessionId(id: string) {
     sessionId.value = id
+  }
+
+  function setTitle(value: string) {
+    title.value = value
+  }
+
+  function setMessages(newMessages: ChatMessage[]) {
+    messages.value = newMessages
   }
 
   function addMessage(role: 'user' | 'assistant', content: string) {
@@ -36,19 +45,24 @@ export const useChatStore = defineStore('chat', () => {
 
   function reset() {
     sessionId.value = ''
+    title.value = ''
     messages.value = []
     isLoading.value = false
   }
 
   return {
     sessionId,
+    title,
     messages,
     isLoading,
     hasMessages,
     setSessionId,
+    setTitle,
+    setMessages,
     addMessage,
     setLoading,
     clearMessages,
     reset
   }
 })
+

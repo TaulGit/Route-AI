@@ -1,12 +1,14 @@
 """POI 搜索 Agent 节点"""
 
 from typing import Dict, Any
+from datetime import datetime
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from ...core.llm import get_llm
 from ...services.amap_service import get_amap_service
-from ...models.schemas import AgentState, AgentStep, NodeType, TripStatus
+from ...services.embedding_service import get_vector_store
+from ...models.schemas import AgentState, AgentStep, NodeType, TripStatus, POI
 
 
 # POI 搜索 Agent 的系统提示
@@ -84,13 +86,44 @@ async def poi_search_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 seen.add(poi.name)
                 unique_pois.append(poi)
 
-        # 4. 更新状态
+        # 4. ChromaDB语义搜索补充
+        chroma_pois = []
+        try:
+            vector_store = get_vector_store()
+            semantic_query = f"{' '.join(agent_state.preferences) if agent_state.preferences else '景点'} {agent_state.free_text_input or ''}"
+            if semantic_query.strip():
+                docs = await vector_store.search_similar_pois(
+                    query=semantic_query,
+                    city=agent_state.city,
+                    k=10
+                )
+                for doc in docs:
+                    name = doc.metadata.get("name", "")
+                    if name and name not in seen:
+                        seen.add(name)
+                        chroma_pois.append(POI(
+                            id=doc.metadata.get("poi_id", ""),
+                            name=name,
+                            address=doc.metadata.get("address", agent_state.city),
+                            category=doc.metadata.get("category", ""),
+                            description=doc.page_content[:200] if doc.page_content else "",
+                            rating=doc.metadata.get("avg_rating", None)
+                        ))
+                print(f"[POI Agent] ChromaDB语义搜索补充了 {len(chroma_pois)} 个POI")
+        except Exception as e:
+            print(f"[POI Agent] ChromaDB搜索失败(非关键): {e}")
+
+        # 合并结果：高德搜索结果在前，ChromaDB补充在后
+        unique_pois.extend(chroma_pois)
+
+        # 5. 更新状态
         step.status = "completed"
         step.output = {
             "pois_count": len(unique_pois),
-            "keywords_used": search_keywords
+            "keywords_used": search_keywords,
+            "chromadb_supplement": len(chroma_pois)
         }
-        step.duration_ms = 0  # TODO: 计算实际耗时
+        step.duration_ms = 0
 
         agent_state.pois = unique_pois[:20]  # 最多保留20个
         agent_state.steps.append(step)
@@ -105,7 +138,3 @@ async def poi_search_node(state: Dict[str, Any]) -> Dict[str, Any]:
         agent_state.errors.append(f"POI搜索失败: {str(e)}")
         agent_state.steps.append(step)
         return agent_state.model_dump()
-
-
-# 导入 datetime
-from datetime import datetime

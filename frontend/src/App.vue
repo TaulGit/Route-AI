@@ -13,12 +13,43 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 * {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #f5f7fa;
+  font-family: var(--ra-font-text);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--ra-font-display);
+  font-weight: 600;
+}
+
+.brand-text,
+.section-label,
+.auth-kicker,
+.history-kicker {
+  font-family: var(--ra-font-sans);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  transition: transform 0.24s ease, box-shadow 0.24s ease, background-color 0.24s ease, border-color 0.24s ease, color 0.24s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 #app {

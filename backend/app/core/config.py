@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Unsplash
     unsplash_access_key: str = ""
 
+    # Supabase 验证
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+
     # 日志
     log_level: str = "INFO"
 

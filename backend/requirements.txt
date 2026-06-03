@@ -28,6 +28,9 @@ httpx>=0.27.0
 aiohttp>=3.10.0
 requests>=2.31.0
 
+# JWT 验证（Supabase）
+python-jose[cryptography]>=3.3.0
+
 # Utilities
 python-dateutil>=2.8.2
 loguru>=0.7.0

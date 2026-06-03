@@ -1,14 +1,14 @@
 """FastAPI 主应用"""
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from ..core.config import get_settings
-from ..core.llm import setup_langsmith  # 显式导入以确保LangSmith设置
-from .routes import trip, chat, map, config
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# 启动时设置 LangSmith
+from ..core.config import get_settings
+from ..core.llm import setup_langsmith
+from .routes import chat, config, map, trip
+
 setup_langsmith()
 
 
@@ -17,7 +17,6 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     settings = get_settings()
 
-    # 启动时
     print("\n" + "=" * 60)
     print(f"[START] {settings.app_name} v{settings.app_version}")
     print("=" * 60)
@@ -33,7 +32,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # 关闭时
     print("\n[STOP] 应用正在关闭...\n")
 
 
@@ -51,38 +49,29 @@ def create_app() -> FastAPI:
 
 ### 核心特性
 - 多 Agent 协作：POI搜索、天气查询、酒店推荐、行程规划
-- Human-in-the-loop：关键决策点用户确认
 - 多轮对话：支持追问和行程调整
 - Agent 可观测性：集成 LangSmith
 - 记忆系统：保存用户偏好
 - 向量检索：景点知识库
-
-### Agent 流程
-```
-POI搜索 -> 天气查询 -> 酒店推荐 -> 行程规划 -> 用户审核
-```
         """,
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc"
     )
 
-    # CORS 配置 - 允许所有来源
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 允许所有来源
+        allow_origins=settings.get_cors_origins_list(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # 注册路由
     app.include_router(trip.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(map.router, prefix="/api")
     app.include_router(config.router, prefix="/api")
 
-    # 根路由
     @app.get("/")
     async def root():
         return {
@@ -92,7 +81,6 @@ POI搜索 -> 天气查询 -> 酒店推荐 -> 行程规划 -> 用户审核
             "docs": "/docs"
         }
 
-    # 健康检查
     @app.get("/health")
     async def health():
         return {"status": "healthy"}

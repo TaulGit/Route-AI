@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..core.config import get_settings
-from ..models.schemas import POI, Weather, Hotel, Location
+from ..models.schemas import POI, Weather, Hotel, Location, RouteSegment
 
 
 class AmapService:
@@ -234,6 +234,198 @@ class AmapService:
         print(f"[Amap] 坐标: ({location.longitude}, {location.latitude})")
 
         return location
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_driving_direction(
+        self,
+        origin: Location,
+        destination: Location,
+        city: Optional[str] = None
+    ) -> Optional[RouteSegment]:
+        """驾车路径规划"""
+        print(f"\n[Amap] get_driving_direction: ({origin.longitude},{origin.latitude}) -> ({destination.longitude},{destination.latitude})")
+
+        params = {
+            "key": self.api_key,
+            "origin": f"{origin.longitude},{origin.latitude}",
+            "destination": f"{destination.longitude},{destination.latitude}",
+            "extensions": "all",
+            "output": "json"
+        }
+        if city:
+            params["city"] = city
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(f"{self.base_url}/direction/driving", params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        if data.get("status") != "1":
+            print(f"[Amap] 驾车路径规划失败: {data.get('info')}")
+            return None
+
+        route = data.get("route", {})
+        paths = route.get("paths", [])
+        if not paths:
+            return None
+
+        path = paths[0]
+        distance = int(path.get("distance", 0))
+        duration = int(path.get("duration", 0))
+        # 获取polyline用于地图绘制
+        steps = path.get("steps", [])
+        polyline = steps[0].get("polyline", "") if steps else ""
+
+        print(f"[Amap] 驾车: 距离{distance}m, 耗时{int(duration/60)}min")
+        return RouteSegment(
+            from_poi="",
+            to_poi="",
+            from_location=origin,
+            to_location=destination,
+            distance_meters=distance,
+            duration_minutes=int(duration / 60),
+            polyline=polyline,
+            transport_mode="driving",
+            cost_estimate=self._estimate_driving_cost(distance)
+        )
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_walking_direction(
+        self,
+        origin: Location,
+        destination: Location
+    ) -> Optional[RouteSegment]:
+        """步行路径规划"""
+        print(f"\n[Amap] get_walking_direction: ({origin.longitude},{origin.latitude}) -> ({destination.longitude},{destination.latitude})")
+
+        params = {
+            "key": self.api_key,
+            "origin": f"{origin.longitude},{origin.latitude}",
+            "destination": f"{destination.longitude},{destination.latitude}",
+            "output": "json"
+        }
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(f"{self.base_url}/direction/walking", params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        if data.get("status") != "1":
+            print(f"[Amap] 步行路径规划失败: {data.get('info')}")
+            return None
+
+        route = data.get("route", {})
+        paths = route.get("paths", [])
+        if not paths:
+            return None
+
+        path = paths[0]
+        distance = int(path.get("distance", 0))
+        duration = int(path.get("duration", 0))
+        steps = path.get("steps", [])
+        polyline = steps[0].get("polyline", "") if steps else ""
+
+        print(f"[Amap] 步行: 距离{distance}m, 耗时{int(duration/60)}min")
+        return RouteSegment(
+            from_poi="",
+            to_poi="",
+            from_location=origin,
+            to_location=destination,
+            distance_meters=distance,
+            duration_minutes=int(duration / 60),
+            polyline=polyline,
+            transport_mode="walking",
+            cost_estimate=0.0
+        )
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_transit_direction(
+        self,
+        origin: Location,
+        destination: Location,
+        city: str
+    ) -> Optional[RouteSegment]:
+        """公交路径规划"""
+        print(f"\n[Amap] get_transit_direction: ({origin.longitude},{origin.latitude}) -> ({destination.longitude},{destination.latitude}), city={city}")
+
+        params = {
+            "key": self.api_key,
+            "origin": f"{origin.longitude},{origin.latitude}",
+            "destination": f"{destination.longitude},{destination.latitude}",
+            "city": city,
+            "extensions": "all",
+            "output": "json"
+        }
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(f"{self.base_url}/direction/transit/integrated", params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        if data.get("status") != "1":
+            print(f"[Amap] 公交路径规划失败: {data.get('info')}")
+            return None
+
+        route = data.get("route", {})
+        transits = route.get("transits", [])
+        if not transits:
+            return None
+
+        transit = transits[0]
+        distance = int(transit.get("distance", 0))
+        duration = int(transit.get("duration", 0))
+        cost = float(transit.get("cost", 0))
+
+        # 获取公交路线的polyline
+        segments = transit.get("segments", [])
+        polylines = []
+        for seg in segments:
+            if "walking" in seg:
+                for step in seg["walking"].get("steps", []):
+                    if step.get("polyline"):
+                        polylines.append(step["polyline"])
+            if "bus" in seg:
+                for bus_seg in seg["bus"].get("buslines", []):
+                    if bus_seg.get("polyline"):
+                        polylines.append(bus_seg["polyline"])
+
+        polyline = polylines[0] if polylines else ""
+
+        print(f"[Amap] 公交: 距离{distance}m, 耗时{int(duration/60)}min, 费用{cost}元")
+        return RouteSegment(
+            from_poi="",
+            to_poi="",
+            from_location=origin,
+            to_location=destination,
+            distance_meters=distance,
+            duration_minutes=int(duration / 60),
+            polyline=polyline,
+            transport_mode="transit",
+            cost_estimate=cost
+        )
+
+    def _estimate_driving_cost(self, distance_meters: int) -> float:
+        """估算驾车费用(按出租车计)"""
+        km = distance_meters / 1000
+        # 简化计算: 起步价10元(3km) + 每公里2元
+        if km <= 3:
+            return 10.0
+        return 10.0 + (km - 3) * 2.0
+
+    async def get_direction(
+        self,
+        origin: Location,
+        destination: Location,
+        city: str,
+        transport_mode: str = "walking"
+    ) -> Optional[RouteSegment]:
+        """统一的路径规划入口"""
+        if transport_mode == "driving" or transport_mode == "自驾":
+            return await self.get_driving_direction(origin, destination, city)
+        elif transport_mode == "transit" or transport_mode == "公共交通":
+            return await self.get_transit_direction(origin, destination, city)
+        else:
+            return await self.get_walking_direction(origin, destination)
 
     async def get_static_map(
         self,

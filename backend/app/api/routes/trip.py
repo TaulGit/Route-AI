@@ -1,32 +1,36 @@
 """旅行规划 API 路由"""
 
-import uuid
 import json
-import traceback
 import os
+import traceback
+import uuid
 from datetime import datetime
-from typing import Optional
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse as FastAPIStreamingResponse
 
-from ...models.schemas import (
-    TripRequest, TripPlanResponse, StreamingResponse,
-    UserFeedback, TripStatus, TripPlan, DayPlan, Attraction, Meal, Location, Hotel, Budget
-)
+from ...agents.graph import get_local_route_graph
 from ...core.llm import get_llm, invoke_llm_with_logging
+from ...core.supabase_auth import SupabaseUser, get_current_user
+from ...models.schemas import (
+    LocalRouteRequest,
+    StreamingResponse,
+    TripPlanResponse,
+    TripRequest,
+    TripStatus,
+    UserFeedback,
+)
 from ...services.amap_service import get_amap_service
 
 router = APIRouter(prefix="/trip", tags=["旅行规划"])
 
-# 保存结果的目录
 RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "saved_results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-def _save_trip_result(session_id: str, trip_plan: dict, request: TripRequest):
-    """保存行程规划结果到JSON文件"""
+def _save_trip_result_file(session_id: str, trip_plan: dict, request: TripRequest):
+    """保存行程规划结果到JSON文件（兼容保留）"""
     try:
-        # 构建保存数据
         save_data = {
             "session_id": session_id,
             "created_at": datetime.now().isoformat(),
@@ -39,12 +43,11 @@ def _save_trip_result(session_id: str, trip_plan: dict, request: TripRequest):
                 "accommodation": request.accommodation,
                 "preferences": request.preferences,
                 "free_text_input": request.free_text_input,
-                "budget": request.budget
+                "budget": request.budget,
             },
-            "result": trip_plan
+            "result": trip_plan,
         }
 
-        # 生成文件名：城市_日期_session_id.json
         filename = f"{request.city}_{request.start_date}_{session_id[:8]}.json"
         filepath = os.path.join(RESULTS_DIR, filename)
 
@@ -59,27 +62,23 @@ def _save_trip_result(session_id: str, trip_plan: dict, request: TripRequest):
 
 
 @router.post("/plan")
-async def create_trip_plan(request: TripRequest):
-    """
-    创建旅行计划 - 同步接口
-    """
+async def create_trip_plan(request: TripRequest, current_user: SupabaseUser = Depends(get_current_user)):
+    """创建旅行计划 - 同步接口"""
     session_id = request.session_id or str(uuid.uuid4())
 
-    print(f"\n{'='*60}")
-    print(f"[Trip Plan] 开始处理请求")
+    print(f"\n{'=' * 60}")
+    print("[Trip Plan] 开始处理请求")
     print(f"[Trip Plan] Session ID: {session_id}")
     print(f"[Trip Plan] 城市: {request.city}")
     print(f"[Trip Plan] 日期: {request.start_date} ~ {request.end_date}")
     print(f"[Trip Plan] 天数: {request.travel_days}")
     print(f"[Trip Plan] LLM Provider: {request.llm_provider}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     try:
-        # 1. 获取地图数据
         print("[Trip Plan] Step 1: 获取地图数据...")
         amap = get_amap_service()
 
-        # 搜索景点
         pois = []
         search_keywords = request.preferences if request.preferences else ["景点"]
         print(f"[Trip Plan] 搜索关键词: {search_keywords}")
@@ -94,7 +93,6 @@ async def create_trip_plan(request: TripRequest):
                 print(f"[Trip Plan] POI搜索失败: {e}")
                 traceback.print_exc()
 
-        # 去重
         seen = set()
         unique_pois = []
         for poi in pois:
@@ -104,7 +102,6 @@ async def create_trip_plan(request: TripRequest):
 
         print(f"[Trip Plan] 去重后共 {len(unique_pois)} 个景点")
 
-        # 搜索酒店
         hotels = []
         try:
             print(f"[Trip Plan] 正在搜索酒店: {request.accommodation}")
@@ -113,22 +110,19 @@ async def create_trip_plan(request: TripRequest):
         except Exception as e:
             print(f"[Trip Plan] 酒店搜索失败: {e}")
 
-        # 获取天气
         weather = []
         try:
-            print(f"[Trip Plan] 正在查询天气...")
+            print("[Trip Plan] 正在查询天气...")
             weather = await amap.get_weather(request.city)
             print(f"[Trip Plan] 获取到 {len(weather)} 天天气")
         except Exception as e:
             print(f"[Trip Plan] 天气查询失败: {e}")
 
-        # 2. 构建提示词
         print("[Trip Plan] Step 2: 构建 LLM 提示词...")
         pois_info = _format_pois(unique_pois[:15])
         weather_info = _format_weather(weather)
         hotels_info = _format_hotels(hotels[:5])
 
-        # 使用字符串拼接而不是 f-string 避免嵌套过深
         preferences_str = ', '.join(request.preferences) if request.preferences else '无特殊偏好'
         extra_requirements = request.free_text_input or '无'
 
@@ -144,43 +138,26 @@ async def create_trip_plan(request: TripRequest):
             pois_info=pois_info,
             weather_info=weather_info,
             hotels_info=hotels_info,
-            budget_range=request.budget
+            budget_range=request.budget,
         )
 
-        # 3. 调用 LLM
         print("[Trip Plan] Step 3: 调用 LLM...")
         llm_provider = request.llm_provider or "deepseek"
         llm = get_llm(llm_provider)
-
-        # 使用带日志的LLM调用
         llm_response = await invoke_llm_with_logging(llm, prompt, llm_provider)
 
-        # 4. 解析响应
         print("[Trip Plan] Step 4: 解析 LLM 响应...")
         trip_plan = _parse_llm_response(llm_response, request, unique_pois, hotels, weather)
         print(f"[Trip Plan] 解析成功，共 {len(trip_plan.get('days', []))} 天行程")
 
-        # 打印解析后的数据
-        print(f"\n{'='*60}")
-        print(f"[Trip Plan] 解析后的行程数据:")
-        print(f"[Trip Plan] 城市: {trip_plan.get('city')}")
-        print(f"[Trip Plan] 日期: {trip_plan.get('start_date')} ~ {trip_plan.get('end_date')}")
-        for i, day in enumerate(trip_plan.get('days', [])):
-            print(f"[Trip Plan] 第{i+1}天: {day.get('date')}, {len(day.get('attractions', []))} 个景点")
-            for j, attr in enumerate(day.get('attractions', [])):
-                loc = attr.get('location', {})
-                print(f"[Trip Plan]   景点[{j+1}]: {attr.get('name')} @ ({loc.get('longitude')}, {loc.get('latitude')})")
-        print(f"{'='*60}\n")
-
-        # 保存结果到文件
-        _save_trip_result(session_id, trip_plan, request)
+        _save_trip_result_file(session_id, trip_plan, request)
 
         return {
             "success": True,
             "message": "旅行计划生成成功",
             "data": trip_plan,
             "status": "completed",
-            "session_id": session_id
+            "session_id": session_id,
         }
 
     except HTTPException:
@@ -195,13 +172,11 @@ def _build_prompt(city, start_date, end_date, travel_days, transportation,
                    accommodation, preferences, extra_requirements,
                    pois_info, weather_info, hotels_info, budget_range=None):
     """构建 LLM 提示词"""
-    # 预算信息
     budget_str = "无预算限制"
     budget_hint = ""
     if budget_range and len(budget_range) == 2:
         min_budget, max_budget = budget_range
         budget_str = f"{min_budget} - {max_budget} 元"
-        # 根据预算给出提示
         if max_budget <= 1500:
             budget_hint = "\n注意：用户预算较紧张，请推荐免费或低价景点，选择经济实惠的餐饮和住宿。"
         elif max_budget <= 3000:
@@ -297,41 +272,36 @@ def _build_prompt(city, start_date, end_date, travel_days, transportation,
 
 
 @router.post("/plan/stream")
-async def create_trip_plan_stream(request: TripRequest):
+async def create_trip_plan_stream(request: TripRequest, current_user: SupabaseUser = Depends(get_current_user)):
     """创建旅行计划 - 流式响应"""
+    print(f"[Trip Stream] 认证通过，用户: {current_user.id}")
     session_id = request.session_id or str(uuid.uuid4())
 
     print(f"\n{'='*60}")
-    print(f"[Trip Plan Stream] 开始处理请求")
+    print("[Trip Plan Stream] 开始处理请求")
     print(f"[Trip Plan Stream] Session ID: {session_id}")
     print(f"[Trip Plan Stream] 城市: {request.city}")
     print(f"{'='*60}\n")
 
     async def event_generator():
         try:
-            # Step 1: 初始化
             yield _create_sse_event(session_id, 1, "init", "running", "正在初始化...")
 
             amap = get_amap_service()
             pois = []
             search_keywords = request.preferences if request.preferences else ["景点"]
 
-            # Step 2: POI搜索
-            yield _create_sse_event(session_id, 2, "poi_search", "running",
-                                    f"正在搜索景点: {', '.join(search_keywords[:3])}...")
+            yield _create_sse_event(session_id, 2, "poi_search", "running", f"正在搜索景点: {', '.join(search_keywords[:3])}...")
 
             for i, keyword in enumerate(search_keywords[:3]):
                 try:
-                    yield _create_sse_event(session_id, 2, "poi_search", "running",
-                                            f"正在搜索: {keyword} ({i+1}/{min(3, len(search_keywords))})")
+                    yield _create_sse_event(session_id, 2, "poi_search", "running", f"正在搜索: {keyword} ({i + 1}/{min(3, len(search_keywords))})")
                     result = await amap.search_poi(keyword, request.city, citylimit=True)
                     pois.extend(result)
-                    yield _create_sse_event(session_id, 2, "poi_search", "running",
-                                            f"已找到 {len(result)} 个 {keyword} 相关景点")
+                    yield _create_sse_event(session_id, 2, "poi_search", "running", f"已找到 {len(result)} 个 {keyword} 相关景点")
                 except Exception as e:
                     print(f"POI搜索失败: {e}")
-                    yield _create_sse_event(session_id, 2, "poi_search", "running",
-                                            f"搜索 {keyword} 时出错: {str(e)}")
+                    yield _create_sse_event(session_id, 2, "poi_search", "running", f"搜索 {keyword} 时出错: {str(e)}")
 
             seen = set()
             unique_pois = []
@@ -340,48 +310,31 @@ async def create_trip_plan_stream(request: TripRequest):
                     seen.add(poi.name)
                     unique_pois.append(poi)
 
-            yield _create_sse_event(session_id, 2, "poi_search", "completed",
-                                    f"景点搜索完成，共找到 {len(unique_pois)} 个景点",
-                                    {"pois_count": len(unique_pois)})
+            yield _create_sse_event(session_id, 2, "poi_search", "completed", f"景点搜索完成，共找到 {len(unique_pois)} 个景点", {"pois_count": len(unique_pois)})
 
-            # Step 3: 酒店搜索
-            yield _create_sse_event(session_id, 3, "hotel", "running",
-                                    f"正在搜索{request.accommodation}...")
-
+            yield _create_sse_event(session_id, 3, "hotel", "running", f"正在搜索{request.accommodation}...")
             hotels = []
             try:
                 hotels = await amap.search_hotels(request.city, request.accommodation)
-                yield _create_sse_event(session_id, 3, "hotel", "completed",
-                                        f"酒店搜索完成，找到 {len(hotels)} 家酒店",
-                                        {"hotels_count": len(hotels)})
+                yield _create_sse_event(session_id, 3, "hotel", "completed", f"酒店搜索完成，找到 {len(hotels)} 家酒店", {"hotels_count": len(hotels)})
             except Exception as e:
                 print(f"酒店搜索失败: {e}")
-                yield _create_sse_event(session_id, 3, "hotel", "completed",
-                                        f"酒店搜索完成（部分失败）")
+                yield _create_sse_event(session_id, 3, "hotel", "completed", "酒店搜索完成（部分失败）")
 
-            # Step 4: 天气查询
-            yield _create_sse_event(session_id, 4, "weather", "running",
-                                    "正在查询天气预报...")
-
+            yield _create_sse_event(session_id, 4, "weather", "running", "正在查询天气预报...")
             weather = []
             try:
                 weather = await amap.get_weather(request.city)
-                yield _create_sse_event(session_id, 4, "weather", "completed",
-                                        f"天气查询完成，获取到 {len(weather)} 天预报",
-                                        {"weather_days": len(weather)})
+                yield _create_sse_event(session_id, 4, "weather", "completed", f"天气查询完成，获取到 {len(weather)} 天预报", {"weather_days": len(weather)})
             except Exception as e:
                 print(f"天气查询失败: {e}")
-                yield _create_sse_event(session_id, 4, "weather", "completed",
-                                        "天气查询完成（部分失败）")
+                yield _create_sse_event(session_id, 4, "weather", "completed", "天气查询完成（部分失败）")
 
-            # Step 5: LLM 规划
-            yield _create_sse_event(session_id, 5, "planner", "running",
-                                    "正在构建行程规划提示词...")
+            yield _create_sse_event(session_id, 5, "planner", "running", "正在构建行程规划提示词...")
 
             pois_info = _format_pois(unique_pois[:15])
             weather_info = _format_weather(weather)
             hotels_info = _format_hotels(hotels[:5])
-
             preferences_str = ', '.join(request.preferences) if request.preferences else '无特殊偏好'
             extra_requirements = request.free_text_input or '无'
 
@@ -397,39 +350,28 @@ async def create_trip_plan_stream(request: TripRequest):
                 pois_info=pois_info,
                 weather_info=weather_info,
                 hotels_info=hotels_info,
-                budget_range=request.budget
+                budget_range=request.budget,
             )
 
-            yield _create_sse_event(session_id, 5, "planner", "running",
-                                    f"正在调用 {request.llm_provider or 'deepseek'} 生成行程规划...")
+            yield _create_sse_event(session_id, 5, "planner", "running", f"正在调用 {request.llm_provider or 'deepseek'} 生成行程规划...")
             print(f"[Trip Plan Stream] 调用 LLM: {request.llm_provider}")
 
             llm = get_llm(request.llm_provider)
             response = await llm.ainvoke(prompt)
 
-            yield _create_sse_event(session_id, 5, "planner", "running",
-                                    "正在解析 AI 响应...")
-
+            yield _create_sse_event(session_id, 5, "planner", "running", "正在解析 AI 响应...")
             trip_plan = _parse_llm_response(response.content, request, unique_pois, hotels, weather)
 
-            yield _create_sse_event(session_id, 5, "planner", "completed",
-                                    f"行程规划完成，共 {len(trip_plan.get('days', []))} 天行程",
-                                    {"plan_generated": True, "days_count": len(trip_plan.get('days', []))})
+            yield _create_sse_event(session_id, 5, "planner", "completed", f"行程规划完成，共 {len(trip_plan.get('days', []))} 天行程", {"plan_generated": True, "days_count": len(trip_plan.get('days', []))})
 
-            # 保存结果到文件
-            _save_trip_result(session_id, trip_plan, request)
+            _save_trip_result_file(session_id, trip_plan, request)
 
-            # Step 6: 完成
-            yield _create_sse_event(session_id, 6, "complete", "completed",
-                                    "行程规划已生成，正在跳转...",
-                                    {"itinerary": trip_plan})
-
+            yield _create_sse_event(session_id, 6, "complete", "completed", "行程规划已生成，正在跳转...", {"itinerary": trip_plan})
             print(f"[Trip Plan Stream] 完成，共 {len(trip_plan.get('days', []))} 天行程")
 
         except Exception as e:
             traceback.print_exc()
-            yield _create_sse_event(session_id, 0, "error", "failed",
-                                    f"执行失败: {str(e)}")
+            yield _create_sse_event(session_id, 0, "error", "failed", f"执行失败: {str(e)}")
 
     return FastAPIStreamingResponse(
         event_generator(),
@@ -437,13 +379,12 @@ async def create_trip_plan_stream(request: TripRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
         }
     )
 
 
-def _create_sse_event(session_id: str, step: int, node: str, status: str,
-                       message: str, data: dict = None) -> str:
+def _create_sse_event(session_id: str, step: int, node: str, status: str, message: str, data: dict = None) -> str:
     """创建 SSE 事件"""
     event = {
         "session_id": session_id,
@@ -451,7 +392,7 @@ def _create_sse_event(session_id: str, step: int, node: str, status: str,
         "node": node,
         "status": status,
         "message": message,
-        "data": data or {}
+        "data": data or {},
     }
     return f"data: {json.dumps(event)}\n\n"
 
@@ -499,15 +440,12 @@ def _format_hotels(hotels: list) -> str:
     return "\n".join(lines)
 
 
-def _parse_llm_response(response: str, request: TripRequest,
-                        pois: list, hotels: list, weather: list) -> dict:
+def _parse_llm_response(response: str, request: TripRequest, pois: list, hotels: list, weather: list) -> dict:
     """解析 LLM 响应"""
     import re
-    from datetime import datetime, timedelta
 
     json_str = response
 
-    # 尝试从 markdown 代码块中提取
     if "```json" in response:
         match = re.search(r'```json\s*([\s\S]*?)\s*```', response)
         if match:
@@ -517,7 +455,6 @@ def _parse_llm_response(response: str, request: TripRequest,
         if match:
             json_str = match.group(1)
 
-    # 查找 JSON 对象
     start = json_str.find("{")
     if start >= 0:
         brace_count = 0
@@ -544,54 +481,36 @@ def _parse_llm_response(response: str, request: TripRequest,
         if "days" not in data or not data["days"]:
             data["days"] = _create_default_days(request, pois)
 
-        # 确保每个景点有正确的坐标
-        print(f"\n[Trip Plan] 开始处理景点坐标...")
-        print(f"[Trip Plan] 可用POI数量: {len(pois)}")
-        for poi in pois[:5]:
-            if poi.location:
-                print(f"[Trip Plan] POI: {poi.name} -> ({poi.location.longitude}, {poi.location.latitude})")
-
-        for day_idx, day in enumerate(data.get("days", [])):
-            print(f"[Trip Plan] 处理第{day_idx + 1}天景点...")
-            for attr_idx, attr in enumerate(day.get("attractions", [])):
+        for day in data.get("days", []):
+            for attr in day.get("attractions", []):
                 attr_name = attr.get("name", "未知")
-                print(f"[Trip Plan] 景点[{attr_idx}]: {attr_name}")
-                print(f"[Trip Plan]   原始location: {attr.get('location')}")
 
                 if "location" not in attr or not attr["location"]:
-                    # 尝试从POI列表中匹配
                     found = False
                     for poi in pois:
                         if poi.name == attr_name or attr_name in poi.name or poi.name in attr_name:
                             if poi.location:
                                 attr["location"] = {
                                     "longitude": poi.location.longitude,
-                                    "latitude": poi.location.latitude
+                                    "latitude": poi.location.latitude,
                                 }
-                                print(f"[Trip Plan]   从POI匹配到坐标: ({poi.location.longitude}, {poi.location.latitude})")
                                 found = True
                                 break
                     if not found:
-                        print(f"[Trip Plan]   未找到匹配POI，使用默认坐标")
                         attr["location"] = {"longitude": 116.4, "latitude": 39.9}
                 else:
-                    # 验证坐标是否有效
                     loc = attr["location"]
                     lng = loc.get("longitude") or loc.get("lng")
                     lat = loc.get("latitude") or loc.get("lat")
                     if not lng or not lat or (lng == 0 and lat == 0):
-                        print(f"[Trip Plan]   坐标无效，尝试从POI匹配...")
                         for poi in pois:
                             if poi.name == attr_name or attr_name in poi.name or poi.name in attr_name:
                                 if poi.location:
                                     attr["location"] = {
                                         "longitude": poi.location.longitude,
-                                        "latitude": poi.location.latitude
+                                        "latitude": poi.location.latitude,
                                     }
-                                    print(f"[Trip Plan]   从POI匹配到坐标: ({poi.location.longitude}, {poi.location.latitude})")
                                     break
-                    else:
-                        print(f"[Trip Plan]   坐标有效: ({lng}, {lat})")
 
         return data
 
@@ -610,7 +529,7 @@ def _parse_llm_response(response: str, request: TripRequest,
                 "total_hotels": 900,
                 "total_meals": 480,
                 "total_transportation": 100,
-                "total": 1680
+                "total": 1680,
             }
         }
 
@@ -637,50 +556,87 @@ def _create_default_days(request: TripRequest, pois: list) -> list:
                     "address": poi.address,
                     "location": {
                         "longitude": poi.location.longitude,
-                        "latitude": poi.location.latitude
+                        "latitude": poi.location.latitude,
                     },
                     "visit_duration": 120,
                     "description": f"{request.city}推荐景点",
                     "category": poi.category or "景点",
-                    "ticket_price": 50
+                    "ticket_price": 50,
                 })
                 poi_index += 1
             else:
                 day_attractions.append({
-                    "name": f"{request.city}景点{i*3+j+1}",
+                    "name": f"{request.city}景点{i * 3 + j + 1}",
                     "address": f"{request.city}市中心",
                     "location": {"longitude": 116.4, "latitude": 39.9},
                     "visit_duration": 120,
                     "description": "推荐景点",
                     "category": "景点",
-                    "ticket_price": 50
+                    "ticket_price": 50,
                 })
 
-        days.append({
+        day_plan = {
             "date": current_date.strftime("%Y-%m-%d"),
             "day_index": i,
-            "description": f"第{i+1}天 - {request.city}游览",
+            "description": f"第{i + 1}天行程",
             "transportation": request.transportation,
             "accommodation": request.accommodation,
+            "hotel": None,
             "attractions": day_attractions,
             "meals": [
-                {"type": "breakfast", "name": "早餐", "description": "当地特色早餐", "estimated_cost": 30},
-                {"type": "lunch", "name": "午餐", "description": "当地特色午餐", "estimated_cost": 50},
-                {"type": "dinner", "name": "晚餐", "description": "当地特色晚餐", "estimated_cost": 80}
-            ]
-        })
+                {"type": "breakfast", "name": "当地早餐", "description": "推荐早餐", "estimated_cost": 20},
+                {"type": "lunch", "name": "当地午餐", "description": "推荐午餐", "estimated_cost": 40},
+                {"type": "dinner", "name": "当地晚餐", "description": "推荐晚餐", "estimated_cost": 60},
+            ],
+        }
+        days.append(day_plan)
 
     return days
 
 
+@router.post("/plan/local/stream")
+async def create_local_route_stream(request: LocalRouteRequest, current_user: SupabaseUser = Depends(get_current_user)):
+    """创建本地路线规划 - 流式响应"""
+    session_id = request.session_id or str(uuid.uuid4())
+    graph = get_local_route_graph()
+
+    async def event_generator():
+        try:
+            async for event in graph.astream({
+                "session_id": session_id,
+                "user_id": str(current_user.id),
+                "city": request.city,
+                "date": request.date,
+                "transportation": request.transportation,
+                "preferences": request.preferences,
+                "free_text_input": request.free_text_input or "",
+                "budget": request.budget,
+                "poi_count": request.poi_count,
+                "start_time": request.start_time or "09:00",
+                "end_time": request.end_time or "18:00",
+                "start_address": request.start_address,
+                "llm_provider": request.llm_provider or "deepseek",
+            }):
+                if isinstance(event, dict):
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+                    if event.get("node") == "complete" and event.get("status") == "completed":
+                        # 行程结果由前端写入 Supabase，后端不再处理数据库持久化
+                        pass
+        except Exception as e:
+            traceback.print_exc()
+            yield f"data: {json.dumps({'node': 'error', 'status': 'failed', 'message': str(e)}, ensure_ascii=False)}\n\n"
+
+    return FastAPIStreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/feedback")
 async def submit_feedback(feedback: UserFeedback):
-    """提交用户反馈"""
-    return {
-        "success": True,
-        "message": f"反馈已处理: {feedback.action}",
-        "status": "completed"
-    }
+    return {"success": True, "message": "反馈已记录", "session_id": feedback.session_id}
 
 
 @router.get("/status/{session_id}")
@@ -692,16 +648,16 @@ async def get_trip_status(session_id: str):
         "current_node": "",
         "steps": [],
         "errors": [],
-        "need_human_review": False
+        "need_human_review": False,
     }
 
 
 @router.get("/result/{session_id}")
-async def get_trip_result(session_id: str):
+async def get_trip_result(session_id: str, current_user: SupabaseUser = Depends(get_current_user)):
     """获取旅行计划结果"""
     return {
         "success": True,
         "message": "获取成功",
         "data": None,
-        "status": "pending"
+        "status": "completed",
     }

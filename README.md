@@ -1,279 +1,208 @@
-# LangGraph 智能旅行助手
+# 🗺️ AI 本地路线智能规划
 
-基于 LangGraph 和 LangChain 构建的智能旅行行程规划系统，支持多 Agent 协作、流式响应、预算控制和地图可视化。
+> 基于 LangGraph + LangChain 构建的本地智能路线规划系统，结合高德地图 POI 数据、UGC 评价语料与用户个性偏好，自动生成可直接执行的个性化路线方案。
 
-ps:本项目为hello-agents在langgraph上借助claude code的重构，目前所有流程均可以跑通，后续还会完善新的功能，欢迎大家提出宝贵的意见和建议，一起学习一起进大厂！！！
+**赛题：现在就出发 — AI 本地路线智能规划**
 
-## 功能特性
+---
 
-### 核心功能
+## ✨ 核心能力
 
-- **智能行程规划**: 根据目的地、日期、偏好自动生成详细行程
-- **预算控制**: 支持设置预算范围，AI 会根据预算合理安排景点、餐饮和住宿
-- **实时进度反馈**: SSE 流式响应，实时展示 Agent 执行进度
-- **地图可视化**: 高德地图集成，展示景点位置和路线
-- **多轮对话**: 支持自然语言交互，逐步完善行程需求
-- **行程持久化**: 每次规划结果自动保存为 JSON 文件
+### 路线生成
+- 根据用户意图自动搜索并串联多个 POI，生成完整一日游路线
+- 高德地图路径规划 API（驾车 / 公交 / 步行）构建真实距离矩阵
+- 贪心 TSP 算法 + LLM 偏好重排，输出地理合理的访问顺序
+- 地图可视化：带编号的彩色标记 + 路线连线（驾车蓝 / 公交金 / 步行紫）
 
-### 技术亮点
+### 多条件与个性化
+- 12 种游玩偏好标签（历史文化、美食、网红打卡、亲子、夜生活…）
+- 自由文本输入（"想吃热干面不排队"）经 LLM 意图解析后影响 POI 筛选
+- 预算范围约束，LLM 生成方案时考虑费用效率
+- 出发地点支持：高德地理编码定位，作为 TSP 起点优化路线
+- 用户偏好画像（ChromaDB 持久化），跨会话积累历史偏好
 
-- **多 LLM 支持**: DeepSeek、阿里云百炼，可灵活切换
-- **高德地图 API**: POI 搜索、天气查询、酒店推荐、地理编码
-- **类型安全**: 后端 Pydantic + 前端 TypeScript 全栈类型校验
-- **响应式 UI**: Vue 3 + Element Plus，支持移动端
+### UGC 评价增强
+- LLM 模拟生成大众点评风格的 UGC 评价（含评分、标签、情感）
+- 基于评价计算热度分、排队时间估算，影响 POI 筛选权重
+- ChromaDB 向量存储缓存评价，同城 POI 复用
 
-## 项目结构
+### 实时体验
+- SSE 流式响应，实时展示每个阶段进度（POI 搜索 → 路线优化 → 方案生成）
+- Unsplash API 自动为每个 POI 匹配实景照片
+- LangSmith 全链路追踪，可观测每次规划的 LLM 调用详情
+
+---
+
+## 🏗️ 系统架构
 
 ```
-langgraph-trip-planner/
-├── backend/                    # 后端服务
-│   ├── app/
-│   │   ├── api/               # API 路由
-│   │   │   ├── routes/
-│   │   │   │   ├── trip.py    # 行程规划接口
-│   │   │   │   ├── chat.py    # 多轮对话接口
-│   │   │   │   └── map.py     # 地图服务接口
-│   │   │   └── main.py        # FastAPI 入口
-│   │   ├── core/              # 核心配置
-│   │   │   ├── config.py      # 环境配置
-│   │   │   └── llm.py         # LLM 工厂
-│   │   ├── models/
-│   │   │   └── schemas.py     # 数据模型
-│   │   ├── services/
-│   │   │   └── amap_service.py # 高德地图服务
-│   │   └── saved_results/     # 行程结果存储
-│   ├── requirements.txt
-│   └── .env                   # 环境变量 (需配置)
-│
-└── frontend/                   # 前端应用
-    ├── src/
-    │   ├── views/
-    │   │   ├── Home.vue       # 表单模式主页
-    │   │   ├── Result.vue     # 结果展示页
-    │   │   └── Chat.vue       # 对话模式页
-    │   ├── stores/            # Pinia 状态管理
-    │   ├── services/          # API 服务
-    │   └── types/             # TypeScript 类型
-    ├── package.json
-    └── .env                   # 环境变量 (需配置)
+用户输入（城市 / 日期 / 偏好 / 出发地 / 预算）
+        │
+        ▼
+  POST /api/trip/plan/local/stream  ──── SSE 事件流 ────▶ 前端实时进度
+        │
+        ├─ 1. 高德 POI 搜索（按偏好关键词，最多 3 轮）
+        │
+        ├─ 2. 路线优化
+        │      ├─ 高德路径规划 API → 距离/时间矩阵
+        │      ├─ 贪心 TSP 排序（从出发点出发）
+        │      └─ 优化指标计算（时间效率 / 费用效率 / 偏好匹配 / 路线合理性）
+        │
+        ├─ 3. Unsplash 实景图片（按 POI 类别英文关键词搜索）
+        │
+        ├─ 4. LLM 生成路线方案
+        │      ├─ 餐饮推荐（早 / 午 / 晚）
+        │      ├─ 路线取舍说明
+        │      └─ 总体建议
+        │
+        └─ 5. complete 事件 → 前端跳转结果页
 ```
 
-## 快速开始
+---
+
+## 🛠️ 技术栈
+
+| 层 | 技术 | 用途 |
+|---|---|---|
+| 后端框架 | FastAPI + uvicorn | 异步 Web 服务 |
+| AI 框架 | LangChain + LangGraph | LLM 编排 / Agent 图 |
+| LLM | DeepSeek / Qwen（通义千问） | 意图解析、方案生成、评价模拟 |
+| 地图服务 | 高德地图 API | POI 搜索、路径规划、地理编码 |
+| 向量存储 | ChromaDB | 用户偏好 / POI 评价持久化 |
+| 可观测性 | LangSmith | LLM 调用链路追踪 |
+| 图片服务 | Unsplash API | POI 实景照片 |
+| 前端框架 | Vue 3 + TypeScript | 响应式 UI |
+| UI 组件 | Element Plus | 表单 / 时间线 / 进度 |
+| 状态管理 | Pinia | 跨页面数据共享 |
+| 地图渲染 | 高德地图 JS API | 标记 / Polyline / InfoWindow |
+
+---
+
+## 🚀 快速开始
 
 ### 环境要求
 
 - Python 3.10+
 - Node.js 18+
-- Conda (推荐)
 
-### 1. 后端配置
+### 1. 后端
 
 ```bash
 cd backend
-
-# 创建并激活 Conda 环境
-conda create -n agent_planner python=3.10
-conda activate agent_planner
-
-# 安装依赖
 pip install -r requirements.txt
-
-# 配置环境变量
-cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+编辑 `.env`：
 
 ```env
-# LLM 配置 (至少配置一个)
-DEEPSEEK_API_KEY=your_deepseek_api_key
-ALIYUN_DASHSCOPE_API_KEY=your_aliyun_api_key
+# LLM（至少配置一个）
+DEEPSEEK_API_KEY=your_key
+ALIYUN_DASHSCOPE_API_KEY=your_key
 
-# 高德地图 API (必需)
-AMAP_API_KEY=your_amap_web_api_key
+# 高德地图（必需）
+AMAP_API_KEY=your_web_api_key
 
-# LangSmith 追踪 (可选)
-LANGCHAIN_TRACING_V2=false
-LANGCHAIN_API_KEY=your_langsmith_key
+# LangSmith（可选，推荐）
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_key
 LANGCHAIN_PROJECT=trip-planner-agent
-```
 
-启动后端服务：
+# Unsplash（可选）
+UNSPLASH_ACCESS_KEY=your_key
+```
 
 ```bash
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 2. 前端配置
+### 2. 前端
 
 ```bash
 cd frontend
-
-# 安装依赖
 npm install
-
-# 配置环境变量
-cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+编辑 `.env`：
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000
-VITE_AMAP_KEY=your_amap_js_api_key
+VITE_AMAP_KEY=your_js_api_key
 ```
 
-> 注意：高德地图需要分别申请 Web API Key (后端) 和 JS API Key (前端)
-
-启动前端服务：
+> 高德地图需分别申请 Web 服务 API Key（后端）和 JS API Key（前端）
 
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:5173 开始使用。
+访问 http://localhost:5173
 
-## API 接口
+---
 
-### 行程规划 (同步)
+## 📖 使用说明
 
-```http
-POST /api/trip/plan
-Content-Type: application/json
+### 本地路线规划（核心功能）
 
-{
-  "city": "武汉",
-  "start_date": "2026-04-23",
-  "end_date": "2026-04-24",
-  "travel_days": 2,
-  "transportation": "公共交通",
-  "accommodation": "舒适型酒店",
-  "preferences": ["历史文化"],
-  "free_text_input": "想看黄鹤楼",
-  "budget": [1000, 3000],
-  "llm_provider": "deepseek"
-}
-```
+1. 选择「📍 本地路线规划」模式
+2. 填写本地城市、游玩日期
+3. 可选填出发地点（如"武汉火车站"）
+4. 勾选游玩偏好，填写额外要求（如"想吃热干面不排队"）
+5. 设置预算范围、期望去几个地方
+6. 选择 AI 模型，点击「生成智能路线」
+7. 实时查看规划进度
+8. 结果页查看：地图路线 + 路线时间线 + 实景图片 + 餐饮推荐
 
-### 行程规划 (流式)
+### 旅行行程规划
 
-```http
-POST /api/trip/plan/stream
-Content-Type: application/json
-
-# 返回 SSE 流式事件
-data: {"node": "init", "status": "running", "message": "正在初始化..."}
-data: {"node": "poi_search", "status": "completed", "message": "找到 20 个景点"}
-data: {"node": "complete", "data": {"itinerary": {...}}}
-```
-
-### 多轮对话
-
-```http
-POST /api/chat/message
-Content-Type: application/json
-
-{
-  "session_id": "session_xxx",
-  "message": "我想去武汉玩两天，预算两千左右",
-  "llm_provider": "deepseek"
-}
-```
-
-## 使用说明
-
-### 表单模式
-
-1. 输入目的地城市、出发和返回日期
-2. 选择交通方式和住宿偏好
-3. 勾选旅行偏好 (历史文化、自然风光、美食等)
-4. 设置预算范围 (滑动条调整)
-5. 选择 AI 模型
-6. 点击"开始规划行程"
-7. 实时查看 Agent 执行进度
-8. 规划完成后自动跳转结果页
+多日跨城旅行规划，支持酒店推荐、天气查询、每日行程安排。
 
 ### 对话模式
 
-支持自然语言交互，例如：
-- "我想去北京玩三天"
-- "预算大概两千块"
-- "喜欢历史文化景点"
-- "帮我推荐一些美食"
+自然语言交互，支持"帮我规划武汉一日游，想吃热干面不排队"等自由输入。
 
-### 结果展示
+---
 
-- 行程概览：城市、日期、天数
-- 地图展示：景点位置标记
-- 每日行程：景点详情、游玩时长、门票价格
-- 餐饮推荐：早餐、午餐、晚餐
-- 住宿安排：酒店信息、价格范围
-- 预算估算：分类费用统计
-- PDF 导出：保存行程计划
+## 📁 项目结构
 
-## 数据存储
+```
+backend/app/
+├── api/routes/
+│   ├── trip.py          # 本地路线 + 旅行规划 SSE 接口
+│   ├── chat.py          # 对话模式接口
+│   ├── map.py           # 高德地图代理
+│   └── config.py        # LLM 提供商配置
+├── agents/
+│   ├── graph.py         # LangGraph 图定义（双模式）
+│   └── nodes/           # 各 Agent 节点
+├── services/
+│   ├── amap_service.py  # 高德地图（POI / 路径 / 天气 / 地理编码）
+│   ├── route_service.py # 距离矩阵 + TSP 路线优化
+│   ├── unsplash_service.py  # 实景图片
+│   ├── review_service.py    # LLM 模拟 UGC 评价
+│   ├── preference_service.py # 用户偏好画像
+│   └── embedding_service.py  # ChromaDB 向量存储
+├── core/
+│   ├── llm.py           # LLM 工厂（DeepSeek / Qwen / OpenAI）
+│   ├── config.py        # 环境变量配置
+│   └── memory.py        # 对话记忆
+└── models/schemas.py    # 全量 Pydantic 数据模型
 
-每次行程规划完成后，结果会自动保存到 `backend/app/saved_results/` 目录：
-
-```json
-{
-  "session_id": "xxx",
-  "created_at": "2026-04-22T15:00:00",
-  "request": {
-    "city": "武汉",
-    "budget": [1000, 3000],
-    ...
-  },
-  "result": {
-    "city": "武汉",
-    "days": [...],
-    "budget": {...}
-  }
-}
+frontend/src/
+├── views/
+│   ├── Home.vue         # 首页：双模式表单 + SSE 进度
+│   ├── Result.vue       # 结果页：地图 + 路线 + 图片 + 指标
+│   └── Chat.vue         # 对话模式
+├── stores/trip.ts       # 路线数据状态管理
+└── services/api.ts      # HTTP + SSE 请求封装
 ```
 
-## 技术栈
+---
 
-### 后端
+## 🔑 API Key 申请
 
-| 技术 | 用途 |
-|------|------|
-| FastAPI | Web 框架 |
-| LangChain | LLM 应用框架 |
-| Pydantic | 数据验证 |
-| httpx | 异步 HTTP 客户端 |
-| uvicorn | ASGI 服务器 |
-
-### 前端
-
-| 技术 | 用途 |
-|------|------|
-| Vue 3 | 前端框架 |
-| TypeScript | 类型安全 |
-| Element Plus | UI 组件库 |
-| Pinia | 状态管理 |
-| Axios | HTTP 客户端 |
-| Vue Router | 路由管理 |
-
-### 外部服务
-
-| 服务 | 用途 |
-|------|------|
-| 高德地图 API | POI 搜索、天气、地理编码 |
-| DeepSeek | LLM 服务 |
-| 阿里云百炼 | LLM 服务 (通义千问) |
-
-## 注意事项
-
-1. **API Key 安全**: 请勿将 `.env` 文件提交到版本控制
-2. **高德地图 Key**: 需要分别申请 Web 服务 API Key (后端) 和 JS API Key (前端)
-3. **LLM 费用**: 使用 DeepSeek 或阿里云百炼会产生 API 调用费用
-4. **预算控制**: AI 生成的预算为估算值，实际花费可能有所不同
-
-## 开发计划
-
-- [ ] 添加更多 LLM 提供商 (OpenAI, Claude)
-- [ ] 支持行程分享功能
-- [ ] 添加用户收藏和历史记录
-- [ ] 优化移动端体验
-- [ ] 添加景点评价和图片
+| 服务 | 地址 | 说明 |
+|---|---|---|
+| 高德地图 | https://console.amap.com | 需分别申请 Web API Key 和 JS API Key |
+| DeepSeek | https://platform.deepseek.com | 注册即可，按量计费 |
+| 阿里云百炼 | https://bailian.console.aliyun.com | 通义千问，有免费额度 |
+| LangSmith | https://smith.langchain.com | 免费，用于链路追踪调试 |
+| Unsplash | https://unsplash.com/developers | 免费，5000次/小时 |

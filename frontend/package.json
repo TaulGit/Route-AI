@@ -18,7 +18,8 @@
     "marked": "^14.0.0",
     "dayjs": "^1.11.0",
     "jspdf": "^3.0.0",
-    "html2canvas": "^1.4.0"
+    "html2canvas": "^1.4.0",
+    "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
