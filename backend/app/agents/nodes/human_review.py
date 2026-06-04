@@ -23,7 +23,7 @@ async def human_review_node(state: Dict[str, Any]) -> Dict[str, Any]:
     step = AgentStep(
         node=NodeType.HUMAN_REVIEW.value,
         status="waiting",
-        input={"itinerary": agent_state.itinerary.model_dump() if agent_state.itinerary else None}
+        input={"itinerary": agent_state.itinerary if agent_state.itinerary else None}
     )
 
     agent_state.steps.append(step)

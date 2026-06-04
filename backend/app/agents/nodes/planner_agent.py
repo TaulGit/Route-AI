@@ -322,31 +322,46 @@ async def _generate_local_route(state: Dict[str, Any], agent_state: AgentState) 
     ordered_attractions = []
     for poi_dict in ordered_pois_raw:
         try:
-            loc = poi_dict.get("location", {})
+            if isinstance(poi_dict, dict):
+                loc = poi_dict.get("location") or {}
+                name = poi_dict.get("name") or ""
+                address = poi_dict.get("address") or ""
+                visit_duration = poi_dict.get("visit_duration") or 120
+                description = poi_dict.get("description") or ""
+                category = poi_dict.get("category") or ""
+                ticket_price = poi_dict.get("ticket_price") or 0
+            else:
+                loc = getattr(poi_dict, 'location', None)
+                name = getattr(poi_dict, 'name', '') or ''
+                address = getattr(poi_dict, 'address', '') or ''
+                visit_duration = getattr(poi_dict, 'visit_duration', 120) or 120
+                description = getattr(poi_dict, 'description', '') or ''
+                category = getattr(poi_dict, 'category', '') or ''
+                ticket_price = getattr(poi_dict, 'ticket_price', 0) or 0
             ordered_attractions.append(Attraction(
-                name=poi_dict.get("name", ""),
-                address=poi_dict.get("address", ""),
+                name=name,
+                address=address,
                 location=Location(
-                    longitude=loc.get("longitude", 0) if isinstance(loc, dict) else 0,
-                    latitude=loc.get("latitude", 0) if isinstance(loc, dict) else 0
+                    longitude=loc.get("longitude", 0) if isinstance(loc, dict) else (getattr(loc, 'longitude', 0) if loc else 0),
+                    latitude=loc.get("latitude", 0) if isinstance(loc, dict) else (getattr(loc, 'latitude', 0) if loc else 0)
                 ),
-                visit_duration=poi_dict.get("visit_duration", 120),
-                description=poi_dict.get("description", ""),
-                category=poi_dict.get("category", ""),
-                ticket_price=poi_dict.get("ticket_price", 0)
+                visit_duration=visit_duration,
+                description=description,
+                category=category,
+                ticket_price=ticket_price
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Planner] POI[{i}] 构建失败: {e}")
 
     # 构建RouteSegments
     route_segments = []
     for seg_dict in segments_raw:
         try:
-            fl = seg_dict.get("from_location", {})
-            tl = seg_dict.get("to_location", {})
+            fl = seg_dict.get("from_location") or {}
+            tl = seg_dict.get("to_location") or {}
             route_segments.append(RouteSegment(
-                from_poi=seg_dict.get("from_poi", ""),
-                to_poi=seg_dict.get("to_poi", ""),
+                from_poi=seg_dict.get("from_poi") or "",
+                to_poi=seg_dict.get("to_poi") or "",
                 from_location=Location(
                     longitude=fl.get("longitude", 0) if isinstance(fl, dict) else 0,
                     latitude=fl.get("latitude", 0) if isinstance(fl, dict) else 0

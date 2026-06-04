@@ -183,16 +183,17 @@ async def route_optimizer_node(state: Dict[str, Any]) -> Dict[str, Any]:
     })
 
     # 将路线数据存入state（后续节点使用）
-    state_update = agent_state.model_dump()
-    state_update["route_segments"] = [s.model_dump() for s in segments]
-    state_update["ordered_pois"] = [p.model_dump() for p in ordered_pois_list]
-    state_update["optimization_metrics"] = metrics
-    state_update["total_distance_km"] = total_distance_km
-    state_update["total_duration_minutes"] = total_time_with_visit
-    state_update["total_cost"] = total_cost
-    state_update["time_budget_minutes"] = time_budget
-    state_update["start_location"] = start_location.model_dump() if start_location else None
+    # 先存到 agent_state 的字段里，确保 model_dump 能正确序列化
+    agent_state.ordered_pois = [p.model_dump() if hasattr(p, 'model_dump') else p for p in ordered_pois_list]
+    agent_state.route_segments = [s.model_dump() if hasattr(s, 'model_dump') else s for s in segments]
+    agent_state.optimization_metrics = metrics
+    agent_state.total_distance_km = total_distance_km
+    agent_state.total_duration_minutes = total_time_with_visit
+    agent_state.total_cost = total_cost
+    if start_location:
+        agent_state.start_location = start_location.model_dump() if hasattr(start_location, 'model_dump') else start_location
 
+    state_update = agent_state.model_dump()
     return state_update
 
 

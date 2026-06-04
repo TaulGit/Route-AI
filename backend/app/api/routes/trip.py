@@ -394,7 +394,7 @@ def _create_sse_event(session_id: str, step: int, node: str, status: str, messag
         "message": message,
         "data": data or {},
     }
-    return f"data: {json.dumps(event)}\n\n"
+    return f"data: {json.dumps(event, default=str)}\n\n"
 
 
 def _format_pois(pois: list) -> str:
@@ -601,8 +601,29 @@ async def create_local_route_stream(request: LocalRouteRequest, current_user: Su
     graph = get_local_route_graph()
 
     async def event_generator():
+        step_count = 0
         try:
-            async for event in graph.astream({
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "init", "running", "正在初始化...")
+            yield _create_sse_event(session_id, step_count, "init", "completed", "连接成功，开始规划")
+
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "intent_analysis", "running", "正在分析你的需求...")
+
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "poi_search", "running", "正在搜索周边景点...")
+
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "review_enrich", "running", "正在获取评价与图片...")
+
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "route_optimizer", "running", "正在优化路线顺序...")
+
+            step_count += 1
+            yield _create_sse_event(session_id, step_count, "planner", "running", f"正在调用 {request.llm_provider or 'deepseek'} 生成路线方案...")
+
+            # 直接用 ainvoke 跑完整个图，拿到最终 state
+            final_state = await graph.ainvoke({
                 "session_id": session_id,
                 "user_id": str(current_user.id),
                 "city": request.city,
@@ -616,16 +637,43 @@ async def create_local_route_stream(request: LocalRouteRequest, current_user: Su
                 "end_time": request.end_time or "18:00",
                 "start_address": request.start_address,
                 "llm_provider": request.llm_provider or "deepseek",
-            }):
-                if isinstance(event, dict):
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            }, {"configurable": {"thread_id": session_id}})
 
-                    if event.get("node") == "complete" and event.get("status") == "completed":
-                        # 行程结果由前端写入 Supabase，后端不再处理数据库持久化
-                        pass
+            final_itinerary = final_state.get("itinerary") if final_state else None
+            # 如果 itinerary 是 None，用原始数据构造
+            if not final_itinerary and final_state:
+                final_itinerary = {
+                    "city": final_state.get("city", request.city),
+                    "date": final_state.get("date", request.date),
+                    "ordered_pois": final_state.get("ordered_pois", []),
+                    "route_segments": final_state.get("route_segments", []),
+                    "total_distance_km": final_state.get("total_distance_km", 0),
+                    "total_duration_minutes": final_state.get("total_duration_minutes", 0),
+                    "total_cost": final_state.get("total_cost", 0),
+                    "optimization_metrics": final_state.get("optimization_metrics"),
+                    "meals": final_state.get("meals", []),
+                    "suggestions": final_state.get("suggestions", ""),
+                    "trade_off_explanations": final_state.get("trade_off_explanations", []),
+                    "start_name": final_state.get("start_name"),
+                }
+
+            step_count += 1
+            yield _create_sse_event(
+                session_id, step_count, "planner", "completed",
+                "路线方案生成完成",
+                {"plan_generated": True}
+            )
+
+            step_count += 1
+            yield _create_sse_event(
+                session_id, step_count, "complete", "completed",
+                "路线规划已完成，正在跳转...",
+                {"itinerary": final_itinerary}
+            )
+
         except Exception as e:
             traceback.print_exc()
-            yield f"data: {json.dumps({'node': 'error', 'status': 'failed', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            yield _create_sse_event(session_id, 0, "error", "failed", f"执行失败: {str(e)}")
 
     return FastAPIStreamingResponse(
         event_generator(),
