@@ -22,7 +22,10 @@ console.log('API_BASE_URL:', API_BASE_URL || '使用代理')
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 300000,
-  headers: { 'Content-Type': 'application/json' }
+  headers: {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true'
+  }
 })
 
 /** 从 Supabase session 获取 token（延迟导入避免循环依赖） */
@@ -83,6 +86,7 @@ export async function createTripPlanStream(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
     body: JSON.stringify(request)
@@ -225,6 +229,7 @@ export async function createLocalRouteStream(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: JSON.stringify(request),
