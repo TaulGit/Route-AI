@@ -1,5 +1,9 @@
 # RouteAI — 可恢复的多 Agent 旅行规划
 
+[![Agent checks](https://github.com/TaulGit/Route-AI/actions/workflows/agent-checks.yml/badge.svg)](https://github.com/TaulGit/Route-AI/actions/workflows/agent-checks.yml)
+
+[![RouteAI 路线与工作台设计示意](docs/routeai-cover.svg)](https://taulgit.github.io/portfolio/routeai.html)
+
 基于 **LangGraph 1.2 + FastAPI + Vue 3** 的一日游规划工作台。新主流程将需求澄清、并行工具检索、结构化提案、确定性校验和用户审核连接成可恢复的工作流。
 
 ## 当前实现
