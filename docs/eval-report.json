@@ -1,0 +1,878 @@
+{
+  "generated_at": "2026-10-26T03:46:01.459330+00:00",
+  "scope": "Offline scripted-provider regression of the real LangGraph workflow",
+  "network_calls": false,
+  "checkpointer": "InMemorySaver (not a persistence/restart test)",
+  "not_measured": [
+    "LLM quality or success rate",
+    "live Amap availability or factual freshness",
+    "production latency or concurrency",
+    "cross-process checkpoint recovery"
+  ],
+  "summary": {
+    "cases": 17,
+    "passed": 17,
+    "failed": 0,
+    "checks": 109,
+    "checks_passed": 109
+  },
+  "results": [
+    {
+      "id": "approve",
+      "description": "Valid deduplicated evidence reaches review and approval",
+      "passed": true,
+      "elapsed_seconds": 0.0088,
+      "checks": [
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=completed, actual=completed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "completed",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 1,
+        "violations": []
+      }
+    },
+    {
+      "id": "reject",
+      "description": "Rejecting a valid proposal ends without regenerating",
+      "passed": true,
+      "elapsed_seconds": 0.0071,
+      "checks": [
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=rejected, actual=rejected"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "rejected",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 1,
+        "violations": []
+      }
+    },
+    {
+      "id": "clarify",
+      "description": "Missing city/date/budget pauses before research and resumes",
+      "passed": true,
+      "elapsed_seconds": 0.0086,
+      "checks": [
+        {
+          "name": "missing_fields_interrupt",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "no_research_before_clarification",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=completed, actual=completed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "completed",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 1,
+        "violations": []
+      }
+    },
+    {
+      "id": "revise",
+      "description": "Changing preferences replans with fresh evidence",
+      "passed": true,
+      "elapsed_seconds": 0.015,
+      "checks": [
+        {
+          "name": "first_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "revision_creates_new_generation",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "revision_uses_fresh_evidence",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "revision_keeps_two_current_branches",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=completed, actual=completed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "completed",
+        "generation": 2,
+        "proposal_attempts": 1,
+        "research_plan_calls": 2,
+        "research_calls": 4,
+        "route_provider_calls": 2,
+        "violations": []
+      }
+    },
+    {
+      "id": "partial_research_failure",
+      "description": "One failed branch preserves usable evidence and diagnostics",
+      "passed": true,
+      "elapsed_seconds": 0.0054,
+      "checks": [
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=completed, actual=completed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "failed_branch_diagnostics",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "completed",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 1,
+        "violations": []
+      }
+    },
+    {
+      "id": "all_research_failure",
+      "description": "No evidence fails without manufacturing an itinerary",
+      "passed": true,
+      "elapsed_seconds": 0.004,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "没有可执行的结构化行程"
+        },
+        {
+          "name": "failed_branch_diagnostics",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "没有可执行的结构化行程"
+        ]
+      }
+    },
+    {
+      "id": "malformed_evidence",
+      "description": "Invalid evidence schemas become branch failures",
+      "passed": true,
+      "elapsed_seconds": 0.0045,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=1, actual=1"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "没有可执行的结构化行程"
+        },
+        {
+          "name": "failed_branch_diagnostics",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 1,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "没有可执行的结构化行程"
+        ]
+      }
+    },
+    {
+      "id": "unknown_poi",
+      "description": "Invented POI IDs are blocked for every bounded attempt",
+      "passed": true,
+      "elapsed_seconds": 0.0066,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "行程引用未检索到的 POI ID"
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "行程引用未检索到的 POI ID"
+        ]
+      }
+    },
+    {
+      "id": "repair_unknown_poi",
+      "description": "A second proposal can repair an unknown ID using validator feedback",
+      "passed": true,
+      "elapsed_seconds": 0.0109,
+      "checks": [
+        {
+          "name": "valid_plan_waits_for_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "review_does_not_regenerate",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=completed, actual=completed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=2, actual=2"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "deduplicated_evidence",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "validator_feedback_reaches_repair",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "completed",
+        "generation": 1,
+        "proposal_attempts": 2,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 1,
+        "violations": []
+      }
+    },
+    {
+      "id": "duplicate_stop",
+      "description": "Duplicate itinerary stops cannot bypass validation",
+      "passed": true,
+      "elapsed_seconds": 0.0093,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "行程包含重复 POI; 缺少连续景点间的交通数据"
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "行程包含重复 POI",
+          "缺少连续景点间的交通数据"
+        ]
+      }
+    },
+    {
+      "id": "over_budget",
+      "description": "An infeasible budget terminates after exactly three attempts",
+      "passed": true,
+      "elapsed_seconds": 0.0057,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "估算费用 60 元超过预算 10 元"
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 3,
+        "violations": [
+          "估算费用 60 元超过预算 10 元"
+        ]
+      }
+    },
+    {
+      "id": "over_time",
+      "description": "A short time window cannot be approved after repair exhaustion",
+      "passed": true,
+      "elapsed_seconds": 0.006,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "预计耗时 160 分钟超过可用 30 分钟"
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 3,
+        "violations": [
+          "预计耗时 160 分钟超过可用 30 分钟"
+        ]
+      }
+    },
+    {
+      "id": "over_stop_limit",
+      "description": "The user stop-count constraint is enforced by code",
+      "passed": true,
+      "elapsed_seconds": 0.0075,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "景点数超过用户上限"
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 3,
+        "violations": [
+          "景点数超过用户上限"
+        ]
+      }
+    },
+    {
+      "id": "malformed_draft",
+      "description": "An invalid structured draft is retried within a fixed bound",
+      "passed": true,
+      "elapsed_seconds": 0.0072,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "没有可执行的结构化行程"
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "没有可执行的结构化行程"
+        ]
+      }
+    },
+    {
+      "id": "provider_exception",
+      "description": "Generation exceptions never become an approved plan",
+      "passed": true,
+      "elapsed_seconds": 0.0061,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "没有可执行的结构化行程"
+        },
+        {
+          "name": "untrusted_ids_never_reach_route",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 0,
+        "violations": [
+          "没有可执行的结构化行程"
+        ]
+      }
+    },
+    {
+      "id": "route_failure",
+      "description": "Missing consecutive-leg evidence blocks an itinerary",
+      "passed": true,
+      "elapsed_seconds": 0.0089,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "缺少连续景点间的交通数据"
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 3,
+        "violations": [
+          "缺少连续景点间的交通数据"
+        ]
+      }
+    },
+    {
+      "id": "route_mismatch",
+      "description": "Route endpoints must match the proposed stop order",
+      "passed": true,
+      "elapsed_seconds": 0.0149,
+      "checks": [
+        {
+          "name": "invalid_plan_never_reaches_review",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "final_status",
+          "passed": true,
+          "detail": "expected=failed, actual=failed"
+        },
+        {
+          "name": "proposal_attempts",
+          "passed": true,
+          "detail": "expected=3, actual=3"
+        },
+        {
+          "name": "branch_results_retained",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "expected_violation",
+          "passed": true,
+          "detail": "交通数据与景点顺序不一致"
+        }
+      ],
+      "observations": {
+        "status": "failed",
+        "generation": 1,
+        "proposal_attempts": 3,
+        "research_plan_calls": 1,
+        "research_calls": 2,
+        "route_provider_calls": 3,
+        "violations": [
+          "交通数据与景点顺序不一致"
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 """数据模型定义"""
 
 from typing import List, Optional, Union, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from enum import Enum
 import uuid
@@ -364,5 +364,4 @@ class AgentState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
 
-    class Config:
-        extra = "allow"  # 允许额外字段，防止丢失未定义的图状态字段
+    model_config = ConfigDict(extra="allow")

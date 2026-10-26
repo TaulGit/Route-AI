@@ -49,7 +49,7 @@ async function handleLogin() {
   }
 
   try {
-    await authStore.login({ ...form })
+    await authStore.login(form.username_or_email, form.password)
     ElMessage.success('登录成功')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.push(redirect)

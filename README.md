@@ -1,208 +1,87 @@
-# 🗺️ AI 本地路线智能规划
+# RouteAI — 可恢复的多 Agent 旅行规划
 
-> 基于 LangGraph + LangChain 构建的本地智能路线规划系统，结合高德地图 POI 数据、UGC 评价语料与用户个性偏好，自动生成可直接执行的个性化路线方案。
+基于 **LangGraph 1.2 + FastAPI + Vue 3** 的一日游规划工作台。新主流程将需求澄清、并行工具检索、结构化提案、确定性校验和用户审核连接成可恢复的工作流。
 
-**赛题：现在就出发 — AI 本地路线智能规划**
+## 当前实现
 
----
+- **Coordinator–Worker**：主管拆分最多 3 个研究任务，`Send` 分发独立上下文的检索 Agent；每个 Agent 在模型与 `search_poi` 工具之间循环，最多 3 次模型和 3 次工具尝试。
+- **持久化 HITL**：SQLite checkpointer + `interrupt/Command(resume=...)`，缺信息时澄清，提案生成后等待审核，支持修改、拒绝、刷新恢复和进程重启后续跑。
+- **证据约束**：模型只能选择已检索的 POI ID；坐标、名称、来源和时间由工具结果提供。新主流程不生成模拟 UGC，不把模型编造的地点补作“兜底”。
+- **有界修复**：代码检查地点引用、重复地点、景点数、连续交通、时间和估算预算；最多 2 次修复，仍不满足则明确失败。
+- **真实进度**：从实际节点边界生成 SSE，写入持久事件日志；页面刷新后以服务端快照恢复。浏览器断开不会取消后台任务。
+- **可重复评测**：真实 LangGraph + scripted providers 的离线场景集，另有工具循环、SQLite 恢复、鉴权、重复审核和断流测试。
 
-## ✨ 核心能力
+新前端在 `/` 或 `/agent`，原 UI 保留在 `/classic`。原聊天、多日游和向量画像属于经典实现，见 [经典版说明](docs/legacy.md)。
 
-### 路线生成
-- 根据用户意图自动搜索并串联多个 POI，生成完整一日游路线
-- 高德地图路径规划 API（驾车 / 公交 / 步行）构建真实距离矩阵
-- 贪心 TSP 算法 + LLM 偏好重排，输出地理合理的访问顺序
-- 地图可视化：带编号的彩色标记 + 路线连线（驾车蓝 / 公交金 / 步行紫）
+## 公开作品案例
 
-### 多条件与个性化
-- 12 种游玩偏好标签（历史文化、美食、网红打卡、亲子、夜生活…）
-- 自由文本输入（"想吃热干面不排队"）经 LLM 意图解析后影响 POI 筛选
-- 预算范围约束，LLM 生成方案时考虑费用效率
-- 出发地点支持：高德地理编码定位，作为 TSP 起点优化路线
-- 用户偏好画像（ChromaDB 持久化），跨会话积累历史偏好
+- [Taul 的作品集](https://taulgit.github.io/portfolio.html)
+- [RouteAI 案例与离线执行回放](https://taulgit.github.io/portfolio/routeai.html)：无需登录即可查看真实图执行记录；为固定数据回放，不调用实时模型或地图。
+- 回放数据来自真实离线图运行，可在仓库根目录重新导出：`PYTHONPATH=backend backend/.venv/bin/python backend/scripts/export_portfolio.py`，生成 `docs/portfolio-demo.json`。
 
-### UGC 评价增强
-- LLM 模拟生成大众点评风格的 UGC 评价（含评分、标签、情感）
-- 基于评价计算热度分、排队时间估算，影响 POI 筛选权重
-- ChromaDB 向量存储缓存评价，同城 POI 复用
+## 本地体验（无需 API Key）
 
-### 实时体验
-- SSE 流式响应，实时展示每个阶段进度（POI 搜索 → 路线优化 → 方案生成）
-- Unsplash API 自动为每个 POI 匹配实景照片
-- LangSmith 全链路追踪，可观测每次规划的 LLM 调用详情
-
----
-
-## 🏗️ 系统架构
-
-```
-用户输入（城市 / 日期 / 偏好 / 出发地 / 预算）
-        │
-        ▼
-  POST /api/trip/plan/local/stream  ──── SSE 事件流 ────▶ 前端实时进度
-        │
-        ├─ 1. 高德 POI 搜索（按偏好关键词，最多 3 轮）
-        │
-        ├─ 2. 路线优化
-        │      ├─ 高德路径规划 API → 距离/时间矩阵
-        │      ├─ 贪心 TSP 排序（从出发点出发）
-        │      └─ 优化指标计算（时间效率 / 费用效率 / 偏好匹配 / 路线合理性）
-        │
-        ├─ 3. Unsplash 实景图片（按 POI 类别英文关键词搜索）
-        │
-        ├─ 4. LLM 生成路线方案
-        │      ├─ 餐饮推荐（早 / 午 / 晚）
-        │      ├─ 路线取舍说明
-        │      └─ 总体建议
-        │
-        └─ 5. complete 事件 → 前端跳转结果页
-```
-
----
-
-## 🛠️ 技术栈
-
-| 层 | 技术 | 用途 |
-|---|---|---|
-| 后端框架 | FastAPI + uvicorn | 异步 Web 服务 |
-| AI 框架 | LangChain + LangGraph | LLM 编排 / Agent 图 |
-| LLM | DeepSeek / Qwen（通义千问） | 意图解析、方案生成、评价模拟 |
-| 地图服务 | 高德地图 API | POI 搜索、路径规划、地理编码 |
-| 向量存储 | ChromaDB | 用户偏好 / POI 评价持久化 |
-| 可观测性 | LangSmith | LLM 调用链路追踪 |
-| 图片服务 | Unsplash API | POI 实景照片 |
-| 前端框架 | Vue 3 + TypeScript | 响应式 UI |
-| UI 组件 | Element Plus | 表单 / 时间线 / 进度 |
-| 状态管理 | Pinia | 跨页面数据共享 |
-| 地图渲染 | 高德地图 JS API | 标记 / Polyline / InfoWindow |
-
----
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- Node.js 18+
-
-### 1. 后端
+需要 **Python 3.12、Node.js 22**。系统 Python 3.8 不适用。
 
 ```bash
+python3.12 -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements-agent.lock.txt
 cd backend
-pip install -r requirements.txt
+ROUTEAI_DEMO=true .venv/bin/uvicorn app.api.agent_app:app --host 127.0.0.1 --port 8000
 ```
 
-编辑 `.env`：
-
-```env
-# LLM（至少配置一个）
-DEEPSEEK_API_KEY=your_key
-ALIYUN_DASHSCOPE_API_KEY=your_key
-
-# 高德地图（必需）
-AMAP_API_KEY=your_web_api_key
-
-# LangSmith（可选，推荐）
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_key
-LANGCHAIN_PROJECT=trip-planner-agent
-
-# Unsplash（可选）
-UNSPLASH_ACCESS_KEY=your_key
-```
-
-```bash
-uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### 2. 前端
+另一个终端：
 
 ```bash
 cd frontend
-npm install
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-编辑 `.env`：
+打开 `http://127.0.0.1:5173/`。用武汉示例生成行程，刷新后继续审核；清空城市或预算可体验澄清；修改偏好后可重新规划。
 
-```env
-VITE_AMAP_KEY=your_js_api_key
-```
+`ROUTEAI_DEMO=true` 是显式的**本地演示开关**：使用固定武汉数据，模型/外部工具请求为 0，演示身份为 `local-demo`。它会拒绝创建、恢复实时任务，也不会自动恢复旧 live 任务。默认关闭，不用于共享部署。不要把示例结果当作实时票价或路况。
 
-> 高德地图需分别申请 Web 服务 API Key（后端）和 JS API Key（前端）
+## 实时模式
+
+1. 复制 `backend/.env.example` 为 `backend/.env`，设置 `ROUTEAI_DEMO=false`、高德 Web 服务 Key、至少一个模型 Key、Supabase URL/Anon Key。前端的 Supabase 环境变量见 `frontend/src/lib/supabase.ts`。
+2. 在 `backend/` 启动同一 `app.api.agent_app:app` 入口，前端登录后选择“实时规划”。模型需支持原生 tool calling；结构化输出使用 `with_structured_output(..., method="function_calling")`，不假定每个兼容服务都支持 provider-native JSON Schema。
+3. 需原多日游/聊天等 API 时，安装 `backend/requirements.txt`，改用 `app.api.main:app`；该兼容入口也注册了新 Agent API。仅安装 v3 依赖的独立服务不提供经典 API。
+
+新服务默认使用 `backend/data/agent.sqlite3`（相对于后端工作目录），通过 `AGENT_DB_PATH` 可改为持久卷路径。只支持 **单个后端进程、单个 worker**。Docker/Railway 入口已指向 v3；云环境需挂载持久存储。配置和 Dockerfile 已更新，本次未执行云部署或容器构建。
+
+新链路只查询选中行程的相邻路段，无候选全量距离矩阵。高德失败时明确标为 `estimate`。预算校验只针对当前估算：门票 0 可表示未核实，不保证实际总价；尚未验证开放时间、预约名额、起终点接驳和天气可行性。
+
+## 验证与可复现报告
+
+在仓库根目录：
 
 ```bash
-npm run dev
+backend/.venv/bin/python -m pytest -q
+PYTHONPATH=backend backend/.venv/bin/python -m evals.run
+cd frontend
+npm run build
 ```
 
-访问 http://localhost:5173
+- [离线评测报告](docs/eval-report.json)：**17/17 场景、109/109 检查**；无网络、使用 scripted providers，不测真实模型质量、API 健康度或线上成功率。
+- `backend/tests/test_v3_providers.py`：真实消息/tool 协议上的 fake 模型与 fake 高德，覆盖空结果改词、参数拒绝、调用上限、超时和显式估算。
+- `backend/tests/test_v3_runtime.py`：SQLite、两次独立 Python 进程恢复、浏览器断流、审核幂等保护、用户隔离和 HTTP 接口。
+- `backend/tests/test_v3_workflow.py`：真实图调度，包含必须由两个 worker 同时到达才能释放的并行屏障。
+- `.github/workflows/agent-checks.yml` 提供离线 CI 配置；本地通过不等于 GitHub Actions 已执行。
 
----
+本次已完成浏览器离线演示的生成、刷新恢复与确认；**未配置/调用真实 LLM、高德和 Supabase，未进行线上发布**。实时 API 集成已实现，实际服务兼容性需配置密钥后检验。
 
-## 📖 使用说明
+指标口径：`tool_calls/model_calls` 是已返回并持久化节点记录的逻辑请求/尝试数，不是供应商 HTTP 请求数或账单；`elapsed_seconds` 累计已结束执行段的时间，不含人工等待，也不能完整统计崩溃前未落盘的执行。节点中的只读检索可能在故障恢复时重放，不宣称 exactly-once。
 
-### 本地路线规划（核心功能）
+## 代码入口与项目材料
 
-1. 选择「📍 本地路线规划」模式
-2. 填写本地城市、游玩日期
-3. 可选填出发地点（如"武汉火车站"）
-4. 勾选游玩偏好，填写额外要求（如"想吃热干面不排队"）
-5. 设置预算范围、期望去几个地方
-6. 选择 AI 模型，点击「生成智能路线」
-7. 实时查看规划进度
-8. 结果页查看：地图路线 + 路线时间线 + 实景图片 + 餐饮推荐
-
-### 旅行行程规划
-
-多日跨城旅行规划，支持酒店推荐、天气查询、每日行程安排。
-
-### 对话模式
-
-自然语言交互，支持"帮我规划武汉一日游，想吃热干面不排队"等自由输入。
-
----
-
-## 📁 项目结构
-
-```
-backend/app/
-├── api/routes/
-│   ├── trip.py          # 本地路线 + 旅行规划 SSE 接口
-│   ├── chat.py          # 对话模式接口
-│   ├── map.py           # 高德地图代理
-│   └── config.py        # LLM 提供商配置
-├── agents/
-│   ├── graph.py         # LangGraph 图定义（双模式）
-│   └── nodes/           # 各 Agent 节点
-├── services/
-│   ├── amap_service.py  # 高德地图（POI / 路径 / 天气 / 地理编码）
-│   ├── route_service.py # 距离矩阵 + TSP 路线优化
-│   ├── unsplash_service.py  # 实景图片
-│   ├── review_service.py    # LLM 模拟 UGC 评价
-│   ├── preference_service.py # 用户偏好画像
-│   └── embedding_service.py  # ChromaDB 向量存储
-├── core/
-│   ├── llm.py           # LLM 工厂（DeepSeek / Qwen / OpenAI）
-│   ├── config.py        # 环境变量配置
-│   └── memory.py        # 对话记忆
-└── models/schemas.py    # 全量 Pydantic 数据模型
-
-frontend/src/
-├── views/
-│   ├── Home.vue         # 首页：双模式表单 + SSE 进度
-│   ├── Result.vue       # 结果页：地图 + 路线 + 图片 + 指标
-│   └── Chat.vue         # 对话模式
-├── stores/trip.ts       # 路线数据状态管理
-└── services/api.ts      # HTTP + SSE 请求封装
-```
-
----
-
-## 🔑 API Key 申请
-
-| 服务 | 地址 | 说明 |
-|---|---|---|
-| 高德地图 | https://console.amap.com | 需分别申请 Web API Key 和 JS API Key |
-| DeepSeek | https://platform.deepseek.com | 注册即可，按量计费 |
-| 阿里云百炼 | https://bailian.console.aliyun.com | 通义千问，有免费额度 |
-| LangSmith | https://smith.langchain.com | 免费，用于链路追踪调试 |
-| Unsplash | https://unsplash.com/developers | 免费，5000次/小时 |
+| 路径 | 用途 |
+|---|---|
+| `backend/app/agents/v3/models.py` | 需求、证据、结构化提案与 API 契约 |
+| `backend/app/agents/v3/workflow.py` | 状态图、并行归并、澄清、校验与修复 |
+| `backend/app/agents/v3/providers.py` | 原生工具循环、模型/高德适配、离线数据 |
+| `backend/app/agents/v3/runtime.py` | 检查点、后台执行、事件日志与恢复 |
+| `backend/app/api/agent_app.py` | 不依赖经典 Chroma 栈的独立入口 |
+| `frontend/src/views/Agent.vue` | 新版工作台 |
+| [架构与面试复盘](docs/architecture.md) | 技术选择、官方来源和能力边界 |
+| [简历新版](docs/resume.md) | 可直接使用的项目经历和表述依据 |

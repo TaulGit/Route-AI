@@ -7,14 +7,17 @@ import './styles/theme.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
-import Home from './views/Home.vue'
-import Result from './views/Result.vue'
-import Chat from './views/Chat.vue'
-import History from './views/History.vue'
+import Agent from './views/Agent.vue'
 import { supabase } from './lib/supabase'
 
+const Home = () => import('./views/Home.vue')
+const Result = () => import('./views/Result.vue')
+const Chat = () => import('./views/Chat.vue')
+const History = () => import('./views/History.vue')
+
 const routes = [
-  { path: '/', name: 'Home', component: Home },
+  { path: '/', alias: '/agent', name: 'Agent', component: Agent },
+  { path: '/classic', name: 'Home', component: Home },
   { path: '/result', name: 'Result', component: Result, meta: { requiresAuth: true } },
   { path: '/chat', name: 'Chat', component: Chat, meta: { requiresAuth: true } },
   { path: '/history', name: 'History', component: History, meta: { requiresAuth: true } }

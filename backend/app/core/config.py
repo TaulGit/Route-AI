@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     app_version: str = "2.0.0"
     debug: bool = False
 
+    # v3 runtime. Demo authentication bypass must be explicitly enabled locally.
+    routeai_demo: bool = False
+    agent_db_path: str = "./data/agent.sqlite3"
+
     # 服务器配置
     host: str = "0.0.0.0"
     port: int = 8000
@@ -37,7 +41,7 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4-turbo-preview"
+    openai_model: str = ""
 
     # LangSmith
     langchain_tracing_v2: bool = False

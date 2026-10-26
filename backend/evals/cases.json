@@ -1,0 +1,22 @@
+{
+  "description": "Offline scripted graph regression only; no real model/map APIs, no recommendation-quality claim.",
+  "cases": [
+    {"id": "approve", "description": "Valid deduplicated evidence reaches review and approval", "scenario": "valid", "expected": {"status": "completed", "attempts": 1, "poi_count": 3}},
+    {"id": "reject", "description": "Rejecting a valid proposal ends without regenerating", "scenario": "valid", "expected": {"status": "rejected", "attempts": 1, "poi_count": 3}},
+    {"id": "clarify", "description": "Missing city/date/budget pauses before research and resumes", "scenario": "valid", "flow": "clarify", "expected": {"status": "completed", "attempts": 1, "poi_count": 3}},
+    {"id": "revise", "description": "Changing preferences replans with fresh evidence", "scenario": "valid", "flow": "revise", "expected": {"status": "completed", "attempts": 1, "poi_count": 3}},
+    {"id": "partial_research_failure", "description": "One failed branch preserves usable evidence and diagnostics", "scenario": "one_branch_fails", "expected": {"status": "completed", "attempts": 1, "poi_count": 2, "failed_branch_count": 1}},
+    {"id": "all_research_failure", "description": "No evidence fails without manufacturing an itinerary", "scenario": "all_branches_fail", "expected": {"status": "failed", "attempts": 1, "poi_count": 0, "failed_branch_count": 2, "violation_contains": "没有可执行", "no_route_calls": true}},
+    {"id": "malformed_evidence", "description": "Invalid evidence schemas become branch failures", "scenario": "malformed_evidence", "expected": {"status": "failed", "attempts": 1, "poi_count": 0, "failed_branch_count": 2, "violation_contains": "没有可执行", "no_route_calls": true}},
+    {"id": "unknown_poi", "description": "Invented POI IDs are blocked for every bounded attempt", "scenario": "unknown_poi", "expected": {"status": "failed", "attempts": 3, "violation_contains": "未检索到", "no_route_calls": true}},
+    {"id": "repair_unknown_poi", "description": "A second proposal can repair an unknown ID using validator feedback", "scenario": "repairable_unknown_poi", "expected": {"status": "completed", "attempts": 2, "poi_count": 3}},
+    {"id": "duplicate_stop", "description": "Duplicate itinerary stops cannot bypass validation", "scenario": "duplicate_stop", "expected": {"status": "failed", "attempts": 3, "violation_contains": "重复 POI", "no_route_calls": true}},
+    {"id": "over_budget", "description": "An infeasible budget terminates after exactly three attempts", "scenario": "valid", "brief_updates": {"budget_max": 10}, "expected": {"status": "failed", "attempts": 3, "violation_contains": "超过预算"}},
+    {"id": "over_time", "description": "A short time window cannot be approved after repair exhaustion", "scenario": "valid", "brief_updates": {"start_time": "09:00", "end_time": "09:30"}, "expected": {"status": "failed", "attempts": 3, "violation_contains": "超过可用"}},
+    {"id": "over_stop_limit", "description": "The user stop-count constraint is enforced by code", "scenario": "over_stop_limit", "brief_updates": {"max_pois": 1}, "expected": {"status": "failed", "attempts": 3, "violation_contains": "景点数超过"}},
+    {"id": "malformed_draft", "description": "An invalid structured draft is retried within a fixed bound", "scenario": "malformed_draft", "expected": {"status": "failed", "attempts": 3, "violation_contains": "没有可执行", "no_route_calls": true}},
+    {"id": "provider_exception", "description": "Generation exceptions never become an approved plan", "scenario": "provider_exception", "expected": {"status": "failed", "attempts": 3, "violation_contains": "没有可执行", "no_route_calls": true}},
+    {"id": "route_failure", "description": "Missing consecutive-leg evidence blocks an itinerary", "scenario": "route_exception", "expected": {"status": "failed", "attempts": 3, "violation_contains": "缺少连续"}},
+    {"id": "route_mismatch", "description": "Route endpoints must match the proposed stop order", "scenario": "route_mismatch", "expected": {"status": "failed", "attempts": 3, "violation_contains": "交通数据与景点顺序不一致"}}
+  ]
+}

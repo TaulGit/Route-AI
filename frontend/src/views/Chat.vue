@@ -328,14 +328,6 @@ const providerTextMap: Record<'deepseek' | 'aliyun', string> = {
   aliyun: '阿里云百炼'
 }
 
-// 快捷指令
-const quickCommands = [
-  { label: '📍 本地路线', text: '帮我规划一个武汉一日游路线，想吃热干面不排队' },
-  { label: '🏛️ 历史文化', text: '我对历史文化景点感兴趣' },
-  { label: '🍜 美食之旅', text: '帮我规划一个美食之旅' },
-  { label: '⏰ 高效路线', text: '帮我规划一个不走冤枉路的路线' }
-]
-
 // 示例对话
 const examples = [
   '帮我规划一个武汉一日游路线，偏好美食历史文化，预算300以内',

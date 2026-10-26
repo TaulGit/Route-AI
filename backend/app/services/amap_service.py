@@ -18,7 +18,7 @@ class AmapService:
         self.base_url = "https://restapi.amap.com/v3"
 
         print(f"[Amap] 初始化高德地图服务")
-        print(f"[Amap] API Key: {self.api_key[:8]}...{self.api_key[-4:] if self.api_key else '未配置'}")
+        print(f"[Amap] API Key: {'已配置' if self.api_key else '未配置'}")
 
         if not self.api_key:
             raise ValueError("高德地图 API Key 未配置")

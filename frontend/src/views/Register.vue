@@ -61,7 +61,7 @@ async function handleRegister() {
   }
 
   try {
-    await authStore.register({ ...form })
+    await authStore.register(form.username, form.email, form.password)
     ElMessage.success('注册成功，请登录')
     router.push('/login')
   } catch (error: any) {

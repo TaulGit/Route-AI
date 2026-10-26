@@ -526,32 +526,6 @@ function parsePolylinePath(polyline: string): [number, number][] {
   }
 }
 
-function buildFallbackSegmentPath(seg: any, idx: number): [number, number][] {
-  if (seg?.from_location && seg?.to_location) {
-    const fl = seg.from_location
-    const tl = seg.to_location
-    if (fl.longitude && fl.latitude && tl.longitude && tl.latitude) {
-      return [[fl.longitude, fl.latitude], [tl.longitude, tl.latitude]]
-    }
-  }
-
-  if (tripStore.orderedPois[idx] && tripStore.orderedPois[idx + 1]) {
-    const a = tripStore.orderedPois[idx].location
-    const b = tripStore.orderedPois[idx + 1].location
-    if (a && b) {
-      const alng = a.longitude || a.lng
-      const alat = a.latitude || a.lat
-      const blng = b.longitude || b.lng
-      const blat = b.latitude || b.lat
-      if (alng && alat && blng && blat) {
-        return [[alng, alat], [blng, blat]]
-      }
-    }
-  }
-
-  return []
-}
-
 function searchRouteWithService(
   mode: 'walking' | 'driving',
   from: [number, number],
@@ -697,7 +671,7 @@ async function createMap() {
           if (!lng || !lat || (lng === 0 && lat === 0)) return null
           return { lng, lat }
         })
-        .filter(Boolean)
+        .filter((point): point is { lng: number; lat: number } => point !== null)
 
       for (let i = 0; i < orderedPoints.length - 1; i++) {
         const seg = segs[i]

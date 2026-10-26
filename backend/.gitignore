@@ -47,6 +47,8 @@ logs/
 
 # Saved results (user trip data)
 saved_results/
+data/agent.sqlite3*
+data/*.agent.sqlite3*
 
 # Testing
 .pytest_cache/

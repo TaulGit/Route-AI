@@ -9,6 +9,7 @@
             <span class="brand-text">RouteAI</span>
           </div>
           <div class="account-actions">
+            <button class="ghost-btn" @click="$router.push('/agent')">新版 Agent 工作台 ↗</button>
             <template v-if="authStore.isLoggedIn">
               <span class="welcome-user">你好，{{ authStore.displayName }}</span>
               <button class="ghost-btn" @click="$router.push('/history')">历史记录</button>

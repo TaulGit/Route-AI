@@ -49,7 +49,7 @@ class LLMFactory:
         print(f"[LLM] Temperature: {temperature}, MaxTokens: {max_tokens}")
         print(f"{'='*60}")
 
-        cache_key = f"{provider}_{temperature}_{max_tokens}"
+        cache_key = (provider, temperature, max_tokens, repr(sorted(kwargs.items())))
         if cache_key in cls._instances:
             print(f"[LLM] 使用缓存的实例")
             return cls._instances[cache_key]
@@ -80,7 +80,6 @@ class LLMFactory:
             print(f"[LLM] DeepSeek 配置:")
             print(f"[LLM]   Base URL: {settings.deepseek_base_url}")
             print(f"[LLM]   Model: {settings.deepseek_model}")
-            print(f"[LLM]   API Key: {api_key[:8]}...{api_key[-4:]}")
 
             return ChatOpenAI(
                 model=settings.deepseek_model,
@@ -99,7 +98,6 @@ class LLMFactory:
             print(f"[LLM] 阿里云百炼配置:")
             print(f"[LLM]   Base URL: https://dashscope.aliyuncs.com/compatible-mode/v1")
             print(f"[LLM]   Model: {settings.aliyun_model}")
-            print(f"[LLM]   API Key: {api_key[:8]}...{api_key[-4:]}")
 
             return ChatOpenAI(
                 model=settings.aliyun_model,
@@ -114,11 +112,12 @@ class LLMFactory:
             api_key = settings.openai_api_key
             if not api_key:
                 raise ValueError("OpenAI API Key 未配置，请检查 .env 文件中的 OPENAI_API_KEY")
+            if not settings.openai_model:
+                raise ValueError("请在 OPENAI_MODEL 中配置支持工具调用的可用模型")
 
             print(f"[LLM] OpenAI 配置:")
             print(f"[LLM]   Base URL: {settings.openai_base_url}")
             print(f"[LLM]   Model: {settings.openai_model}")
-            print(f"[LLM]   API Key: {api_key[:8]}...{api_key[-4:]}")
 
             return ChatOpenAI(
                 model=settings.openai_model,

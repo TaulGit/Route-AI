@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from ..core.config import get_settings
 from ..core.llm import setup_langsmith
 from .routes import chat, config, map, trip
+from .routes import agent
+from .agent_app import agent_lifespan
 
 setup_langsmith()
 
@@ -30,7 +32,8 @@ async def lifespan(app: FastAPI):
     print(f"CORS Origins: {settings.get_cors_origins_list()}")
     print("=" * 60 + "\n")
 
-    yield
+    async with agent_lifespan(app):
+        yield
 
     print("\n[STOP] 应用正在关闭...\n")
 
@@ -71,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api")
     app.include_router(map.router, prefix="/api")
     app.include_router(config.router, prefix="/api")
+    app.include_router(agent.router, prefix="/api")
 
     @app.get("/")
     async def root():
